@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>大樓財務管理系統 v4.7 (餘額自動計算版)</title>
+    <title>大樓財務管理系統 v5.2 (修復變數錯誤)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -160,6 +160,10 @@
             <p class="mb-1 text-xs text-gray-500">Apps Script 網址：</p>
             <input type="text" id="gasUrlInput" class="w-full border rounded p-2 mb-4 text-xs">
             
+            <button onclick="importFiveFees()" class="w-full mb-3 px-3 py-2 text-xs bg-indigo-100 text-indigo-700 rounded border border-indigo-300 font-bold hover:bg-indigo-200">
+                <i class="fa-solid fa-file-import"></i> 📥 快速匯入 5 筆管理費 (2-2, 3-1, 3-2...)
+            </button>
+
             <button onclick="cleanDuplicates()" class="w-full mb-3 px-3 py-2 text-xs bg-green-100 text-green-700 rounded border border-green-300 font-bold hover:bg-green-200">
                 <i class="fa-solid fa-broom"></i> 清除重複資料
             </button>
@@ -224,6 +228,7 @@
         const initialLen = records.length;
         records = records.filter(r => {
             if (r.id === 'fixed-init-balance-2025' || r.id === 'fixed-sample-parking') return false;
+            // 避免舊範例重複
             if (r.type === '初始餘額' && r.desc === '上年度餘額' && r.balance == 378129) return false;
             if (r.type === '車位租借' && r.desc && r.desc.includes('車位 31 (2-2)')) return false;
             return true;
@@ -233,10 +238,6 @@
             localStorage.setItem('building_records', JSON.stringify(records));
         }
         // ------------------------------
-
-        if (records.length === 0) {
-            // 已清空，不再自動產生預設資料
-        }
 
         updateTotalBalanceDisplay();
         renderRecords();
@@ -309,23 +310,45 @@
                     runningBal = parseInt(r.balance) || 0;
                 } else {
                     runningBal = runningBal + inc - exp;
-                    r.balance = runningBal; // 更新物件內的餘額屬性
+                    r.balance = runningBal; 
                 }
                 return { ...r, currentBalance: runningBal }; // currentBalance 用於顯示
             });
         }
 
+        // 修改過的發送函數：保證 UI 更新
         async function sendToSheet(record, form, action = 'create') {
-            if (!GAS_URL) return;
             const btn = form ? form.querySelector('button[type="submit"]') : null;
-            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 上傳中'; }
+            
+            // 內部 UI 重置函數
+            const resetUI = () => {
+                if (form && action === 'create') {
+                    if (form.id === 'form-fee') btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>提交管理費';
+                    else if (form.id === 'form-parking') btn.innerHTML = '<i class="fa-solid fa-car mr-2"></i>登記車位';
+                    else btn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜支';
+                    btn.disabled = false;
+                    form.reset();
+                    if(form.querySelector('.date-input')) form.querySelector('.date-input').value = today;
+                }
+                renderRecords(); checkSyncStatus();
+            };
+
+            // 本地模式或無網址時，直接結束 (handleSubmit 已處理本地儲存)
+            if (!GAS_URL) {
+                resetUI();
+                return;
+            }
+
+            if (btn && action === 'create') {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 上傳中';
+            }
             
             const payload = { ...record, action: action };
             if (payload.last3) payload.last3 = "'" + payload.last3;
 
             try {
                 await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                record.synced = true;
                 
                 // 成功後更新本地狀態
                 let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
@@ -338,17 +361,9 @@
                 if(action === 'create') alert('成功！');
                 setTimeout(() => downloadFromCloud(true), 800); 
             } catch (e) {
-                alert('上傳失敗');
+                alert('上傳失敗 (已存於本地)');
             } finally {
-                if (btn) {
-                    if (form.id === 'form-fee') btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>提交管理費';
-                    else if (form.id === 'form-parking') btn.innerHTML = '<i class="fa-solid fa-car mr-2"></i>登記車位';
-                    else btn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜支';
-                    btn.disabled = false;
-                    form.reset();
-                    if(form.querySelector('.date-input')) form.querySelector('.date-input').value = today;
-                }
-                renderRecords(); checkSyncStatus();
+                resetUI();
             }
         }
 
@@ -388,6 +403,9 @@
             downloadFromCloud(false);
         }
 
+        // 2. 編輯模式邏輯
+        let editingId = null; // Defined here to be globally accessible
+
         async function handleSubmit(event, type) {
             event.preventDefault();
             const form = event.target;
@@ -424,6 +442,9 @@
             // 5. 儲存
             localStorage.setItem('building_records', JSON.stringify(rs));
             updateTotalBalanceDisplay();
+            
+            // 6. 立即更新畫面 (重要！解決按鈕沒反應的感覺)
+            renderRecords();
 
             if(editingId) { cancelEdit(); syncPendingRecords(); }
             else { sendToSheet(newRecord, form, 'create'); }
@@ -524,6 +545,39 @@
             localStorage.setItem('building_records', JSON.stringify(newRs));
             renderRecords(); updateTotalBalanceDisplay(); checkSyncStatus();
             alert(`已刪除 ${deletedCount} 筆未同步的資料。`); closeSettingsModal();
+        }
+
+        // 快速匯入5筆管理費功能 (指定資料)
+        function importFiveFees() {
+            if(!confirm("確定要匯入指定的 5 筆管理費資料嗎？")) return;
+            // 2-2 1/2 081 -> 2026-01-02
+            // 3-1 12/31 252 -> 2025-12-31
+            // 3-2 1/2 722 -> 2026-01-02
+            // 4-2 12/31 252 -> 2025-12-31
+            // 5-2 1/2 370 -> 2026-01-02
+            
+            const newFees = [
+                { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (2-2)', income: 4800, expense: 0, last3: '081', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
+                { id: uuid(), type: '管理費', date: '2025-12-31', desc: '115-上 (3-1)', income: 4800, expense: 0, last3: '252', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
+                { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (3-2)', income: 4800, expense: 0, last3: '722', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
+                { id: uuid(), type: '管理費', date: '2025-12-31', desc: '115-上 (4-2)', income: 4800, expense: 0, last3: '252', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
+                { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (5-2)', income: 4800, expense: 0, last3: '370', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 }
+            ];
+            
+            let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            rs.push(...newFees);
+            
+            // Recalculate balances
+            rs = calculateBalancesForList(rs);
+            
+            localStorage.setItem('building_records', JSON.stringify(rs));
+            renderRecords();
+            updateTotalBalanceDisplay();
+            checkSyncStatus();
+            
+            alert("已匯入 5 筆資料！系統將自動嘗試同步。");
+            closeSettingsModal();
+            syncPendingRecords();
         }
 
         function updateTotalBalanceDisplay() {
