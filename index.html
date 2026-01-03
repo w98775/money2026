@@ -53,7 +53,6 @@
             opacity: 1 !important; -webkit-text-fill-color: #111827; color: #111827; 
             background-color: #f3f4f6;
         }
-        /* 修復搜尋框在 iOS 上可能變透明的問題 */
         input[type="text"], select {
             background-color: #ffffff;
         }
@@ -67,6 +66,21 @@
         .month-checkbox { margin-right: 8px; }
         
         .hide-on-screenshot { display: none !important; }
+
+        /* === 類別標籤修復：解決 iOS 截圖背景位移 === */
+        .type-badge {
+            display: inline-block !important;
+            vertical-align: middle !important;
+            line-height: 1.25rem !important; /* 明確行高解決 Safari 塌陷 */
+            padding: 2px 8px !important;
+            border-radius: 0.375rem !important;
+            font-size: 0.75rem !important;
+            font-weight: 700 !important;
+            white-space: nowrap !important;
+            transform: translateZ(0); /* 強制開啟 GPU 渲染層，修復 html2canvas 座標計算 */
+            -webkit-transform: translateZ(0);
+            box-sizing: border-box !important;
+        }
     </style>
 </head>
 <body>
@@ -222,7 +236,6 @@
                 <h2 class="text-lg font-bold text-gray-800 w-full md:w-auto whitespace-nowrap">流水明細</h2>
                 
                 <div class="flex flex-col gap-3 w-full md:flex-row md:items-center md:w-auto">
-                    <!-- 搜尋框 (強制加上 bg-white) -->
                     <div class="relative w-full md:w-48">
                         <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400">
                             <i class="fa-solid fa-search"></i>
@@ -231,7 +244,6 @@
                     </div>
 
                     <div class="flex items-center justify-between gap-2 w-full md:w-auto">
-                        <!-- 月份多選篩選器 -->
                         <div class="relative">
                             <button onclick="toggleMonthDropdown()" class="flex items-center bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm text-sm text-gray-700 whitespace-nowrap h-[30px] hover:bg-gray-50">
                                 <i class="fa-solid fa-calendar-days text-gray-500 mr-2"></i>
@@ -244,7 +256,6 @@
                             <div id="monthDropdownOverlay" onclick="toggleMonthDropdown()" class="hidden fixed inset-0 z-40 bg-transparent"></div>
                         </div>
 
-                        <!-- 類別篩選 -->
                         <div class="flex space-x-1 bg-gray-100 p-1 rounded overflow-x-auto max-w-[200px] md:max-w-none">
                             <button onclick="filterRecords('all')" id="filter-all" class="filter-btn px-3 py-1 text-xs font-bold rounded bg-white shadow text-indigo-600 whitespace-nowrap">全部</button>
                             <button onclick="filterRecords('管理費')" id="filter-fee" class="filter-btn px-3 py-1 text-xs rounded text-gray-500 whitespace-nowrap">管理費</button>
@@ -268,9 +279,7 @@
             </div>
 
             <!-- 手機版卡片清單 -->
-            <div id="mobileRecordsList" class="md:hidden space-y-3">
-                <!-- 卡片將由 JS 生成 -->
-            </div>
+            <div id="mobileRecordsList" class="md:hidden space-y-3"></div>
 
             <div id="noDataMsg" class="text-center text-gray-400 py-8 hidden">無符合資料</div>
         </div>
@@ -306,12 +315,9 @@
 
     <!-- 浮動按鈕區 -->
     <div class="fixed bottom-5 right-5 flex flex-col gap-2 z-50">
-        <!-- 截圖按鈕 -->
         <button onclick="takeScreenshot()" class="w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition" title="一鍵截圖">
             <i class="fa-solid fa-camera"></i>
         </button>
-
-        <!-- 計算機開關 -->
         <button onclick="toggleCalc()" id="showCalcBtn" class="w-12 h-12 bg-gray-800 text-white rounded-full shadow-lg flex items-center justify-center"><i class="fa-solid fa-calculator"></i></button>
     </div>
 
@@ -351,42 +357,17 @@
 
         let currentFilter = 'all';
         let selectedMonths = new Set(); 
-
         let records = JSON.parse(localStorage.getItem('building_records') || '[]');
         
-        let migrated = false;
-        records.forEach(r => {
-            if (r.type === '雜支') { r.type = '雜項'; migrated = true; }
-        });
-        const initialLen = records.length;
-        records = records.filter(r => {
-            if (r.id === 'fixed-init-balance-2025' || r.id === 'fixed-sample-parking') return false;
-            if (r.type === '初始餘額' && r.desc === '上年度餘額' && r.balance == 378129) return false;
-            if (r.type === '車位租借' && r.desc && r.desc.includes('車位 31 (2-2)')) return false;
-            return true;
-        });
-
-        if (migrated || records.length !== initialLen) {
-            localStorage.setItem('building_records', JSON.stringify(records));
-        }
-
         updateTotalBalanceDisplay();
         initMonthFilter(); 
         renderRecords();
         if (GAS_URL) downloadFromCloud(true); 
 
-        document.addEventListener("visibilitychange", function() {
-            if (!document.hidden && GAS_URL) downloadFromCloud(true);
-        });
-
-        // --- Screenshot Function ---
         function takeScreenshot() {
             switchTab('records');
             document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.add('hide-on-screenshot'));
-
-            // 滾動到頂部
             window.scrollTo(0,0);
-
             const target = document.getElementById('tab-records');
             
             html2canvas(target, {
@@ -404,12 +385,10 @@
                 link.click();
             }).catch(err => {
                 console.error(err);
-                alert('截圖失敗，請重試');
                 document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.remove('hide-on-screenshot'));
             });
         }
 
-        // --- Core Functions ---
         async function downloadFromCloud(silent = false) {
             if (!GAS_URL) return;
             const btn = document.getElementById('headerSyncBtn');
@@ -419,44 +398,22 @@
 
             try {
                 const response = await fetch(`${GAS_URL}?t=${new Date().getTime()}`, { method: 'GET', redirect: 'follow' });
-                if (!response.ok) throw new Error("HTTP " + response.status);
-                const contentType = response.headers.get("content-type");
-                if (contentType && contentType.includes("text/html")) throw new Error("Apps Script 未更新 (HTML Error)");
                 const cloudData = await response.json();
-                
                 let localRecords = JSON.parse(localStorage.getItem('building_records') || '[]');
                 const localMap = new Map(localRecords.map(r => [r.id, r]));
-                let updateCount = 0;
                 
                 cloudData.forEach(cloudRecord => {
-                    if (cloudRecord.type === '雜支') cloudRecord.type = '雜項';
-
-                    if (localMap.has(cloudRecord.id)) {
-                        const localRecord = localMap.get(cloudRecord.id);
-                        if (localRecord.synced) { 
-                            localMap.set(cloudRecord.id, { ...cloudRecord, synced: true });
-                            updateCount++;
-                        }
-                    } else {
+                    if (!localMap.has(cloudRecord.id) || localMap.get(cloudRecord.id).synced) {
                         localMap.set(cloudRecord.id, { ...cloudRecord, synced: true });
-                        updateCount++;
                     }
                 });
 
-                let newRecords = Array.from(localMap.values());
-                newRecords = calculateBalancesForList(newRecords);
-
+                let newRecords = calculateBalancesForList(Array.from(localMap.values()));
                 localStorage.setItem('building_records', JSON.stringify(newRecords));
-                
                 initMonthFilter();
-                renderRecords(); 
-                updateTotalBalanceDisplay(); 
-                checkSyncStatus();
-                if (!silent && updateCount > 0) alert(`已從雲端還原 ${updateCount} 筆資料！`);
-                
+                renderRecords(); updateTotalBalanceDisplay(); 
             } catch (e) {
                 console.error(e);
-                if (!silent) alert("讀取失敗，請檢查設定: " + e.message);
             } finally { checkSyncStatus(); }
         }
 
@@ -465,68 +422,24 @@
                 const d = new Date(a.date) - new Date(b.date);
                 return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
             });
-
             let runningBal = 0;
             return list.map(r => {
-                const inc = parseInt(r.income) || 0;
-                const exp = parseInt(r.expense) || 0;
-                
-                if (r.type === '初始餘額') {
-                    runningBal = parseInt(r.balance) || 0;
-                } else {
-                    runningBal = runningBal + inc - exp;
-                    r.balance = runningBal; 
-                }
+                if (r.type === '初始餘額') runningBal = parseInt(r.balance) || 0;
+                else runningBal = runningBal + (parseInt(r.income) || 0) - (parseInt(r.expense) || 0);
                 return { ...r, currentBalance: runningBal }; 
             });
         }
 
         async function sendToSheet(record, form, action = 'create') {
-            const btn = form ? form.querySelector('button[type="submit"]') : null;
-            
-            const resetUI = () => {
-                if (form && action === 'create') {
-                    if (form.id === 'form-fee') btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>提交管理費';
-                    else if (form.id === 'form-parking') btn.innerHTML = '<i class="fa-solid fa-car mr-2"></i>登記車位';
-                    else btn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜項';
-                    btn.disabled = false;
-                    form.reset();
-                    if(form.querySelector('.date-input')) form.querySelector('.date-input').value = today;
-                }
-                initMonthFilter();
-                renderRecords(); checkSyncStatus();
-            };
-
-            if (!GAS_URL) {
-                resetUI();
-                return;
-            }
-
-            if (btn && action === 'create') {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 上傳中';
-            }
-            
+            if (!GAS_URL) return;
             const payload = { ...record, action: action };
             if (payload.last3) payload.last3 = "'" + payload.last3;
-
             try {
-                await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                
+                await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
                 let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
                 const idx = rs.findIndex(r => r.id === record.id);
-                if (idx !== -1) {
-                    rs[idx].synced = true;
-                    localStorage.setItem('building_records', JSON.stringify(rs));
-                }
-
-                if(action === 'create') alert('成功！');
-                setTimeout(() => downloadFromCloud(true), 800); 
-            } catch (e) {
-                alert('上傳失敗 (已存於本地)');
-            } finally {
-                resetUI();
-            }
+                if (idx !== -1) { rs[idx].synced = true; localStorage.setItem('building_records', JSON.stringify(rs)); }
+            } catch (e) {} finally { checkSyncStatus(); renderRecords(); }
         }
 
         function checkSyncStatus() {
@@ -535,7 +448,6 @@
             const btn = document.getElementById('headerSyncBtn');
             const icon = document.getElementById('syncIcon');
             const txt = document.getElementById('headerSyncText');
-            
             if (pending.length > 0) {
                 btn.className = "flex items-center gap-2 px-3 py-1.5 rounded bg-orange-600 hover:bg-orange-500 text-white shadow-md animate-pulse";
                 icon.className = "fa-solid fa-cloud-arrow-up"; txt.textContent = `未同步 (${pending.length})`;
@@ -547,179 +459,96 @@
 
         function handleSyncClick() {
             const rs = JSON.parse(localStorage.getItem('building_records') || '[]');
-            const pending = rs.filter(r => !r.synced);
-            if (pending.length > 0) syncPendingRecords();
+            if (rs.filter(r => !r.synced).length > 0) syncPendingRecords();
             else downloadFromCloud(false);
         }
 
         async function syncPendingRecords() {
             const rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             const pending = rs.filter(r => !r.synced);
-            if (pending.length === 0) return;
-            
             document.getElementById('headerSyncText').textContent = "上傳中...";
             for (let record of pending) {
                 await sendToSheet(record, null, 'update');
-                await new Promise(r => setTimeout(r, 400));
             }
-            downloadFromCloud(false);
+            downloadFromCloud(true);
         }
 
         let editingId = null; 
-
         async function handleSubmit(event, type) {
             event.preventDefault();
             const form = event.target;
             const data = Object.fromEntries(new FormData(form));
             const newRecord = {
-                id: editingId ? editingId : uuid(),
-                timestamp: new Date().toLocaleString('zh-TW'),
-                date: data.date, type: type,
-                income: 0, expense: 0,
-                last3: String(data.last3 || '').trim(), desc: '', synced: false,
-                balance: 0 
+                id: editingId || uuid(), timestamp: new Date().toLocaleString('zh-TW'),
+                date: data.date, type: type, income: 0, expense: 0,
+                last3: String(data.last3 || '').trim(), desc: '', synced: false
             };
-            
             if (type === '管理費') { newRecord.desc = `${data.period} (${data.unit})`; newRecord.income = parseInt(data.amount) || 0; }
             else if (type === '車位租借') { newRecord.desc = `車位 ${data.unit} (${data.renter})`; newRecord.income = parseInt(data.amount) || 0; }
             else { newRecord.desc = data.summary; newRecord.income = parseInt(data.income)||0; newRecord.expense = parseInt(data.expense)||0; }
 
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             const idx = rs.findIndex(r => r.id === newRecord.id);
-            if (idx !== -1) { rs[idx] = newRecord; } else { rs.push(newRecord); }
-
-            rs = calculateBalancesForList(rs);
-
-            const updatedRecord = rs.find(r => r.id === newRecord.id);
-            if(updatedRecord) {
-                newRecord.balance = updatedRecord.currentBalance; 
-            }
-
-            localStorage.setItem('building_records', JSON.stringify(rs));
-            updateTotalBalanceDisplay();
+            if (idx !== -1) rs[idx] = newRecord; else rs.push(newRecord);
+            localStorage.setItem('building_records', JSON.stringify(calculateBalancesForList(rs)));
             
-            initMonthFilter(); 
-            renderRecords();
-
+            updateTotalBalanceDisplay(); renderRecords(); initMonthFilter();
             if(editingId) { cancelEdit(); syncPendingRecords(); }
-            else { sendToSheet(newRecord, form, 'create'); }
+            else { form.reset(); form.querySelector('.date-input').value = today; sendToSheet(newRecord, form, 'create'); }
         }
 
         function initMonthFilter() {
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             let monthSet = new Set();
-            rs.forEach(r => {
-                if (r.date) {
-                    let m = r.date.substring(0, 7); 
-                    if (m.startsWith('2025')) {
-                        m = '2026-01';
-                    }
-                    monthSet.add(m);
-                }
-            });
+            rs.forEach(r => { if (r.date) monthSet.add(r.date.substring(0, 7)); });
             let sortedMonths = Array.from(monthSet).sort().reverse();
-            
             const container = document.getElementById('monthCheckboxes');
             container.innerHTML = '';
-            
             const allDiv = document.createElement('div');
-            allDiv.className = 'month-checkbox-label hover:bg-gray-50 p-1 rounded cursor-pointer';
-            allDiv.innerHTML = `<label class="flex items-center w-full cursor-pointer"><input type="checkbox" value="all" class="month-checkbox mr-2" onchange="handleMonthChange(this)" ${selectedMonths.size === 0 ? 'checked' : ''}> <span class="text-sm">全部顯示</span></label>`;
+            allDiv.className = 'month-checkbox-label';
+            allDiv.innerHTML = `<label class="flex items-center w-full cursor-pointer"><input type="checkbox" value="all" class="month-checkbox" onchange="handleMonthChange(this)" ${selectedMonths.size === 0 ? 'checked' : ''}> <span class="text-sm">全部顯示</span></label>`;
             container.appendChild(allDiv);
-
             sortedMonths.forEach(m => {
                 const div = document.createElement('div');
-                div.className = 'month-checkbox-label hover:bg-gray-50 p-1 rounded cursor-pointer';
-                let labelText = m;
-                if (m === '2026-01') labelText = '2026-01 (含2025)'; 
-                
-                div.innerHTML = `<label class="flex items-center w-full cursor-pointer"><input type="checkbox" value="${m}" class="month-checkbox mr-2" onchange="handleMonthChange(this)" ${selectedMonths.has(m) ? 'checked' : ''}> <span class="text-sm">${labelText}</span></label>`;
+                div.className = 'month-checkbox-label';
+                div.innerHTML = `<label class="flex items-center w-full cursor-pointer"><input type="checkbox" value="${m}" class="month-checkbox" onchange="handleMonthChange(this)" ${selectedMonths.has(m) ? 'checked' : ''}> <span class="text-sm">${m}</span></label>`;
                 container.appendChild(div);
             });
-            
             updateMonthButtonLabel();
         }
 
         function toggleMonthDropdown() {
-            const dropdown = document.getElementById('monthDropdownContent');
-            const overlay = document.getElementById('monthDropdownOverlay');
-            if (dropdown.classList.contains('hidden')) {
-                dropdown.classList.remove('hidden');
-                overlay.classList.remove('hidden');
-            } else {
-                dropdown.classList.add('hidden');
-                overlay.classList.add('hidden');
-            }
+            document.getElementById('monthDropdownContent').classList.toggle('hidden');
+            document.getElementById('monthDropdownOverlay').classList.toggle('hidden');
         }
 
         function handleMonthChange(checkbox) {
-            if (checkbox.value === 'all') {
-                if (checkbox.checked) {
-                    selectedMonths.clear();
-                    document.querySelectorAll('.month-checkbox').forEach(cb => {
-                        if (cb.value !== 'all') cb.checked = false;
-                    });
-                }
-            } else {
-                if (checkbox.checked) {
-                    selectedMonths.add(checkbox.value);
-                    const allCb = document.querySelector('.month-checkbox[value="all"]');
-                    if (allCb) allCb.checked = false;
-                } else {
-                    selectedMonths.delete(checkbox.value);
-                }
-            }
-            
-            if (selectedMonths.size === 0) {
-                 const allCb = document.querySelector('.month-checkbox[value="all"]');
-                 if (allCb) allCb.checked = true;
-            }
-
-            updateMonthButtonLabel();
-            renderRecords();
+            if (checkbox.value === 'all') { if (checkbox.checked) { selectedMonths.clear(); document.querySelectorAll('.month-checkbox').forEach(cb => { if (cb.value !== 'all') cb.checked = false; }); } }
+            else { if (checkbox.checked) { selectedMonths.add(checkbox.value); const allCb = document.querySelector('.month-checkbox[value="all"]'); if (allCb) allCb.checked = false; } else { selectedMonths.delete(checkbox.value); } }
+            if (selectedMonths.size === 0) { const allCb = document.querySelector('.month-checkbox[value="all"]'); if (allCb) allCb.checked = true; }
+            updateMonthButtonLabel(); renderRecords();
         }
 
         function updateMonthButtonLabel() {
             const label = document.getElementById('monthFilterLabel');
-            if (selectedMonths.size === 0) {
-                label.textContent = '篩選月份 (全)';
-            } else {
-                label.textContent = `已選 ${selectedMonths.size} 個月份`;
-            }
+            label.textContent = selectedMonths.size === 0 ? '篩選月份 (全)' : `已選 ${selectedMonths.size} 個月份`;
         }
 
         function renderRecords() {
             const tbody = document.getElementById('recordsTableBody');
             const mobileList = document.getElementById('mobileRecordsList');
             const searchKeyword = document.getElementById('searchInput').value.toLowerCase().trim();
-
             let list = calculateBalancesForList(JSON.parse(localStorage.getItem('building_records') || '[]'));
             
-            // Filter logic
             let filtered = list.filter(r => {
-                const descStr = String(r.desc || '');
-                if (descStr.includes('(已刪除)')) return false;
+                if (String(r.desc || '').includes('(已刪除)')) return false;
                 if (currentFilter!=='all' && r.type!==currentFilter) return false;
-                
-                if (selectedMonths.size > 0) {
-                    let rMonth = r.date.substring(0, 7);
-                    if (r.date.startsWith('2025')) {
-                        rMonth = '2026-01';
-                    }
-                    if (!selectedMonths.has(rMonth)) return false;
-                }
-
-                if (searchKeyword) {
-                    const matchDesc = descStr.toLowerCase().includes(searchKeyword);
-                    const matchType = String(r.type || '').toLowerCase().includes(searchKeyword);
-                    const matchLast3 = String(r.last3 || '').includes(searchKeyword);
-                    if (!matchDesc && !matchType && !matchLast3) return false;
-                }
+                if (selectedMonths.size > 0 && !selectedMonths.has(r.date.substring(0, 7))) return false;
+                if (searchKeyword && !String(r.desc||'').toLowerCase().includes(searchKeyword) && !String(r.type||'').toLowerCase().includes(searchKeyword) && !String(r.last3||'').includes(searchKeyword)) return false;
                 return true;
             });
             
-            tbody.innerHTML = '';
-            mobileList.innerHTML = '';
+            tbody.innerHTML = ''; mobileList.innerHTML = '';
             document.getElementById('noDataMsg').classList.toggle('hidden', filtered.length > 0);
             
             filtered.forEach(r => {
@@ -727,184 +556,119 @@
                 const exp = r.expense>0 ? `<span class="text-red-500">-$${r.expense}</span>` : '';
                 const bal = `$${(r.currentBalance||0).toLocaleString()}`;
                 const l3 = (r.last3||'').replace(/^'/,'');
-                let badge = 'bg-gray-100 text-gray-600';
-                if(r.type==='管理費') badge='bg-blue-100 text-blue-800';
-                if(r.type==='車位租借') badge='bg-green-100 text-green-800';
-                if(r.type==='雜項') badge='bg-orange-100 text-orange-800';
+                let badgeColor = 'bg-gray-100 text-gray-600';
+                if(r.type==='管理費') badgeColor='bg-blue-100 text-blue-800';
+                if(r.type==='車位租借') badgeColor='bg-green-100 text-green-800';
+                if(r.type==='雜項') badgeColor='bg-orange-100 text-orange-800';
                 
-                let icon = r.synced ? '<span class="text-green-500"><i class="fa-solid fa-check"></i></span>' : '<span class="text-orange-500"><i class="fa-solid fa-arrow-up"></i></span>';
-                let action = '';
-                if (r.type!=='初始餘額') {
-                    action = `
-                        <button onclick="editRecord('${r.id}')" class="text-indigo-600 bg-indigo-50 px-2 py-1 rounded text-xs hover:bg-indigo-100 mr-1">修改</button>
-                        <button onclick="deleteRecord('${r.id}')" class="text-red-600 bg-red-50 px-2 py-1 rounded text-xs hover:bg-red-100">刪除</button>
-                    `;
-                }
+                let syncIcon = r.synced ? '<span class="text-green-500"><i class="fa-solid fa-check"></i></span>' : '<span class="text-orange-500"><i class="fa-solid fa-arrow-up"></i></span>';
+                let actionHtml = r.type!=='初始餘額' ? `<button onclick="editRecord('${r.id}')" class="text-indigo-600 bg-indigo-50 px-2 py-1 rounded text-xs mr-1">修改</button><button onclick="deleteRecord('${r.id}')" class="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">刪除</button>` : '';
 
-                // 1. Desktop Table Row
+                // Desktop Row
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-50";
-                
-                // --- iOS 截圖修復關鍵：使用 inline-block + align-middle + leading-4 ---
                 tr.innerHTML = `<td class="px-2 py-3 text-gray-600 whitespace-nowrap">${r.date}</td>
                     <td class="px-2 py-3">
-                        <span class="inline-block align-middle text-xs font-bold mr-1 ${badge} px-2 py-1 rounded whitespace-nowrap leading-4" style="transform: translateZ(0);">${r.type}</span>${r.desc}
+                        <span class="type-badge ${badgeColor} mr-1">${r.type}</span>${r.desc}
                     </td>
                     <td class="px-2 py-3 text-right font-medium">${inc}</td>
                     <td class="px-2 py-3 text-right font-medium">${exp}</td>
                     <td class="px-2 py-3 text-right font-bold text-gray-700">${bal}</td>
                     <td class="px-2 py-3 text-xs text-gray-500">${l3}</td>
-                    <td class="px-2 py-3 text-center screenshot-hide">${icon}</td>
-                    <td class="px-2 py-3 text-center whitespace-nowrap screenshot-hide">${action}</td>`;
+                    <td class="px-2 py-3 text-center screenshot-hide">${syncIcon}</td>
+                    <td class="px-2 py-3 text-center whitespace-nowrap screenshot-hide">${actionHtml}</td>`;
                 tbody.appendChild(tr);
 
-                // 2. Mobile Card
+                // Mobile Card
                 const card = document.createElement('div');
                 card.className = "bg-white p-4 rounded-lg shadow border-l-4 " + (r.type==='管理費'?'border-blue-500':(r.type==='車位租借'?'border-green-500':'border-orange-500'));
-                card.innerHTML = `
-                    <div class="flex justify-between items-start mb-2">
-                        <div>
-                            <span class="text-gray-500 text-xs">${r.date}</span>
-                            <div class="font-bold text-gray-800 text-lg">${r.desc}</div>
-                        </div>
-                        <span class="inline-block align-middle text-xs font-bold ${badge} px-2 py-1 rounded leading-4" style="transform: translateZ(0);">${r.type}</span>
-                    </div>
-                    <div class="flex justify-between items-center mb-2">
-                        <div class="text-sm">
-                            ${inc ? `<div class="font-bold text-green-600">收: $${r.income}</div>` : ''}
-                            ${exp ? `<div class="font-bold text-red-600">支: $${r.expense}</div>` : ''}
-                        </div>
-                        <div class="text-right">
-                            <div class="text-xs text-gray-400">結餘</div>
-                            <div class="font-bold text-gray-700">${bal}</div>
-                        </div>
-                    </div>
-                    <div class="flex justify-between items-center pt-2 border-t border-gray-100 mobile-action-area">
-                        <div class="text-xs text-gray-400">後三碼: ${l3 || '-'}</div>
-                        <div class="flex items-center gap-3">
-                            <div class="text-sm">${icon}</div>
-                            <div class="flex gap-1">${action}</div>
-                        </div>
-                    </div>
-                `;
+                card.innerHTML = `<div class="flex justify-between items-start mb-2">
+                    <div><span class="text-gray-500 text-xs">${r.date}</span><div class="font-bold text-gray-800 text-lg">${r.desc}</div></div>
+                    <span class="type-badge ${badgeColor}">${r.type}</span>
+                </div>
+                <div class="flex justify-between items-center mb-2"><div class="text-sm">${inc?`<div class="font-bold text-green-600">收: $${r.income}</div>`:''}${exp?`<div class="font-bold text-red-600">支: $${r.expense}</div>`:''}</div><div class="text-right"><div class="text-xs text-gray-400">結餘</div><div class="font-bold text-gray-700">${bal}</div></div></div>
+                <div class="flex justify-between items-center pt-2 border-t border-gray-100 mobile-action-area"><div class="text-xs text-gray-400">後三碼: ${l3||'-'}</div><div class="flex items-center gap-3"><div class="text-sm">${syncIcon}</div><div class="flex gap-1">${actionHtml}</div></div></div>`;
                 mobileList.appendChild(card);
             });
         }
 
         function deleteRecord(id) {
-            if(!confirm('確定要刪除這筆資料嗎？\n(這將會把金額歸零並標記為已刪除，然後同步到雲端)')) return;
+            if(!confirm('確定刪除？')) return;
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
-            const index = rs.findIndex(r => r.id === id);
-            if(index !== -1) {
-                let record = rs[index];
-                record.desc = `(已刪除) ${record.desc}`;
-                record.income = 0; record.expense = 0;
-                record.synced = false; 
-                rs[index] = record;
-                rs = calculateBalancesForList(rs);
-                localStorage.setItem('building_records', JSON.stringify(rs));
+            const idx = rs.findIndex(r => r.id === id);
+            if(idx !== -1) {
+                rs[idx].desc = `(已刪除) ${rs[idx].desc}`; rs[idx].income = 0; rs[idx].expense = 0; rs[idx].synced = false;
+                localStorage.setItem('building_records', JSON.stringify(calculateBalancesForList(rs)));
                 syncPendingRecords(); renderRecords(); updateTotalBalanceDisplay();
             }
         }
 
         function cleanDuplicates() {
-            if(!confirm("這將會移除內容完全相同(日期/類型/描述/金額)的重複資料，只保留一筆。\n\n確定執行？")) return;
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
-            const uniqueMap = new Map();
-            let removedCount = 0;
+            const uniqueMap = new Map(); let removed = 0;
             rs.forEach(r => {
                 const key = `${r.date}|${r.type}|${r.desc}|${r.income}|${r.expense}`;
-                if (uniqueMap.has(key)) {
-                    const existing = uniqueMap.get(key);
-                    if (!existing.synced && r.synced) uniqueMap.set(key, r); 
-                    removedCount++;
-                } else uniqueMap.set(key, r);
+                if (uniqueMap.has(key)) { if (r.synced) uniqueMap.set(key, r); removed++; } else uniqueMap.set(key, r);
             });
-            if (removedCount > 0) {
-                let newRecords = Array.from(uniqueMap.values());
-                newRecords = calculateBalancesForList(newRecords);
-                localStorage.setItem('building_records', JSON.stringify(newRecords));
-                renderRecords(); updateTotalBalanceDisplay(); alert(`已移除 ${removedCount} 筆重複資料！`); closeSettingsModal();
-                initMonthFilter(); 
+            if (removed > 0) {
+                localStorage.setItem('building_records', JSON.stringify(calculateBalancesForList(Array.from(uniqueMap.values()))));
+                renderRecords(); updateTotalBalanceDisplay(); alert(`已移除 ${removed} 筆重複資料！`); closeSettingsModal(); initMonthFilter();
             } else alert("未發現重複資料。");
         }
 
         function deleteUnsyncedRecords() {
-            if(!confirm("確定要刪除所有「未同步」的資料嗎？\n這將會遺失尚未上傳到雲端的本機新增/修改紀錄。\n\n此動作無法復原！")) return;
+            if(!confirm("確定？")) return;
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
-            const originalLength = rs.length;
-            const newRs = rs.filter(r => r.synced === true);
-            const deletedCount = originalLength - newRs.length;
-            if (deletedCount === 0) { alert("沒有發現未同步的資料。"); return; }
+            const newRs = rs.filter(r => r.synced);
             localStorage.setItem('building_records', JSON.stringify(newRs));
-            renderRecords(); updateTotalBalanceDisplay(); checkSyncStatus();
-            alert(`已刪除 ${deletedCount} 筆未同步的資料。`); closeSettingsModal();
-            initMonthFilter(); 
+            renderRecords(); updateTotalBalanceDisplay(); checkSyncStatus(); alert(`已處理。`); closeSettingsModal(); initMonthFilter();
         }
 
         function importFiveFees() {
-            if(!confirm("確定要匯入指定的 5 筆管理費資料嗎？")) return;
             const newFees = [
-                { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (2-2)', income: 4800, expense: 0, last3: '081', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
-                { id: uuid(), type: '管理費', date: '2025-12-31', desc: '115-上 (3-1)', income: 4800, expense: 0, last3: '252', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
-                { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (3-2)', income: 4800, expense: 0, last3: '722', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
-                { id: uuid(), type: '管理費', date: '2025-12-31', desc: '115-上 (4-2)', income: 4800, expense: 0, last3: '252', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
-                { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (5-2)', income: 4800, expense: 0, last3: '370', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 }
+                { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (2-2)', income: 4800, expense: 0, last3: '081', timestamp: new Date().toLocaleString('zh-TW'), synced: false },
+                { id: uuid(), type: '管理費', date: '2025-12-31', desc: '115-上 (3-1)', income: 4800, expense: 0, last3: '252', timestamp: new Date().toLocaleString('zh-TW'), synced: false },
+                { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (3-2)', income: 4800, expense: 0, last3: '722', timestamp: new Date().toLocaleString('zh-TW'), synced: false },
+                { id: uuid(), type: '管理費', date: '2025-12-31', desc: '115-上 (4-2)', income: 4800, expense: 0, last3: '252', timestamp: new Date().toLocaleString('zh-TW'), synced: false },
+                { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (5-2)', income: 4800, expense: 0, last3: '370', timestamp: new Date().toLocaleString('zh-TW'), synced: false }
             ];
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             rs.push(...newFees);
-            rs = calculateBalancesForList(rs);
-            localStorage.setItem('building_records', JSON.stringify(rs));
-            renderRecords();
-            updateTotalBalanceDisplay();
-            checkSyncStatus();
-            alert("已匯入 5 筆資料！系統將自動嘗試同步。");
-            closeSettingsModal();
-            syncPendingRecords();
-            initMonthFilter(); 
+            localStorage.setItem('building_records', JSON.stringify(calculateBalancesForList(rs)));
+            renderRecords(); updateTotalBalanceDisplay(); checkSyncStatus(); alert("已匯入！"); closeSettingsModal(); syncPendingRecords(); initMonthFilter();
         }
 
         function updateTotalBalanceDisplay() {
             const rs = calculateBalancesForList(JSON.parse(localStorage.getItem('building_records') || '[]'));
-            if (rs.length > 0) {
-                const latest = rs[rs.length - 1]; 
-                const bal = latest.currentBalance;
-                document.getElementById('totalBalanceDisplay').textContent = (bal !== undefined && !isNaN(bal)) ? `$${bal.toLocaleString()}` : '$0';
-            } else {
-                document.getElementById('totalBalanceDisplay').textContent = '$0';
-            }
+            const bal = rs.length > 0 ? rs[rs.length - 1].currentBalance : 0;
+            document.getElementById('totalBalanceDisplay').textContent = `$${bal.toLocaleString()}`;
         }
 
-        function filterRecords(t) { currentFilter=t; document.querySelectorAll('.filter-btn').forEach(b=>b.className='filter-btn px-3 py-1 text-xs rounded text-gray-500 hover:bg-gray-200'); if(document.getElementById('filter-'+(t==='all'?'all':(t==='管理費'?'fee':(t==='車位租借'?'parking':'misc'))))) document.getElementById('filter-'+(t==='all'?'all':(t==='管理費'?'fee':(t==='車位租借'?'parking':'misc')))).className='filter-btn px-3 py-1 text-xs rounded bg-white shadow text-indigo-600 font-bold'; renderRecords(); }
+        function filterRecords(t) { currentFilter=t; document.querySelectorAll('.filter-btn').forEach(b=>b.className='filter-btn px-3 py-1 text-xs rounded text-gray-500'); document.getElementById('filter-'+(t==='all'?'all':(t==='管理費'?'fee':(t==='車位租借'?'parking':'misc')))).className='filter-btn px-3 py-1 text-xs rounded bg-white shadow text-indigo-600 font-bold'; renderRecords(); }
         function editRecord(id) {
-            const r = JSON.parse(localStorage.getItem('building_records')).find(x=>x.id===id);
-            if(!r) return;
-            editingId = id;
-            document.getElementById('editModeBanner').classList.remove('hidden');
-            let t = r.type==='管理費'?'fee':(r.type==='車位租借'?'parking':'misc');
-            switchTab(t);
-            const f = document.getElementById('form-'+t);
-            if(f.querySelector('[name="date"]')) f.querySelector('[name="date"]').value=r.date;
-            if(f.querySelector('[name="last3"]')) f.querySelector('[name="last3"]').value=r.last3;
+            const r = JSON.parse(localStorage.getItem('building_records')).find(x=>x.id===id); if(!r) return;
+            editingId = id; document.getElementById('editModeBanner').classList.remove('hidden');
+            let t = r.type==='管理費'?'fee':(r.type==='車位租借'?'parking':'misc'); switchTab(t);
+            const f = document.getElementById('form-'+t); f.querySelector('[name="date"]').value=r.date; if(f.querySelector('[name="last3"]')) f.querySelector('[name="last3"]').value=r.last3;
             if(t==='fee') { const m=r.desc.match(/(.+) \((.+)\)/); if(m){f.querySelector('[name="period"]').value=m[1]; f.querySelector('[name="unit"]').value=m[2];} }
             else if(t==='parking') { const m=r.desc.match(/車位 (.+) \((.+)\)/); if(m){f.querySelector('[name="unit"]').value=m[1]; f.querySelector('[name="renter"]').value=m[2]; updateParkingPrice();} }
             else { f.querySelector('[name="summary"]').value=r.desc; f.querySelector('[name="income"]').value=r.income; f.querySelector('[name="expense"]').value=r.expense; }
             document.getElementById(`tab-${t}`).classList.add('editing-mode');
         }
-        function switchTab(t) { document.querySelectorAll('.tab-content').forEach(e=>e.classList.add('hidden-tab')); document.querySelectorAll('.tab-btn').forEach(e=>{e.classList.remove('bg-indigo-100','text-indigo-700');e.classList.add('text-gray-500');}); document.getElementById(`tab-${t}`).classList.remove('hidden-tab'); document.getElementById(`btn-${t}`).classList.add('bg-indigo-100','text-indigo-700'); if(t==='records') filterRecords('all'); }
+        function cancelEdit() { editingId = null; document.getElementById('editModeBanner').classList.add('hidden'); document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('editing-mode')); }
+        function switchTab(t) { document.querySelectorAll('.tab-content').forEach(e=>e.classList.add('hidden-tab')); document.querySelectorAll('.tab-btn').forEach(e=>{e.classList.remove('bg-indigo-100','text-indigo-700');e.classList.add('text-gray-500');}); document.getElementById(`tab-${t}`).classList.remove('hidden-tab'); document.getElementById(`btn-${t}`).classList.add('bg-indigo-100','text-indigo-700'); if(t==='records') filterRecords('all'); cancelEdit(); }
         function updateParkingPrice() { const s=document.getElementById('parkingSpotSelect').value; document.getElementById('parkingPrice').value = s==='11'?200:(s?800:''); }
         function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); document.getElementById('gasUrlInput').value=GAS_URL; }
         function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-        function saveSettings() { const u=document.getElementById('gasUrlInput').value.trim(); if(u){localStorage.setItem('building_gas_url',u); GAS_URL=u; alert('已儲存'); closeSettingsModal(); downloadFromCloud(false);} }
+        function saveSettings() { const u=document.getElementById('gasUrlInput').value.trim(); if(u){localStorage.setItem('building_gas_url',u); GAS_URL=u; closeSettingsModal(); downloadFromCloud(false);} }
         function forceDownload() { downloadFromCloud(false); closeSettingsModal(); }
-        function resetSyncStatus() { let rs=JSON.parse(localStorage.getItem('building_records')||'[]'); rs.forEach(r=>r.synced=false); localStorage.setItem('building_records',JSON.stringify(rs)); checkSyncStatus(); renderRecords(); alert('狀態已重置'); }
+        function resetSyncStatus() { let rs=JSON.parse(localStorage.getItem('building_records')||'[]'); rs.forEach(r=>r.synced=false); localStorage.setItem('building_records',JSON.stringify(rs)); checkSyncStatus(); renderRecords(); alert('重置完成'); }
         let calcVal='0'; const display=document.getElementById('calcDisplay');
-        function toggleCalc() { const c=document.getElementById('floatingCalc'); const b=document.getElementById('showCalcBtn'); if(c.classList.contains('hidden')){c.classList.remove('hidden');b.classList.add('hidden');}else{c.classList.add('hidden');b.classList.remove('hidden');} }
+        function toggleCalc() { document.getElementById('floatingCalc').classList.toggle('hidden'); document.getElementById('showCalcBtn').classList.toggle('hidden'); }
         function calcAppend(v) { if(calcVal==='0' && v!=='.') calcVal=v; else calcVal+=v; display.value=calcVal; }
         function calcClear() { calcVal='0'; display.value='0'; }
         function calcDelete() { calcVal=calcVal.length>1?calcVal.slice(0,-1):'0'; display.value=calcVal; }
         function calcResult() { try{calcVal=String(Function('"use strict";return ('+calcVal+')')());display.value=calcVal;}catch{display.value='Error';setTimeout(calcClear,1000);} }
-        
     </script>
 </body>
 </html>
