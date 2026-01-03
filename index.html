@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>大樓財務管理系統 v4.6 (清空版)</title>
+    <title>大樓財務管理系統 v4.7 (餘額自動計算版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -279,10 +279,8 @@
                 });
 
                 let newRecords = Array.from(localMap.values());
-                newRecords.sort((a, b) => { 
-                    const d = new Date(a.date) - new Date(b.date);
-                    return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
-                });
+                // 雲端下載時也要重算一次餘額，確保顯示正確
+                newRecords = calculateBalancesForList(newRecords);
 
                 localStorage.setItem('building_records', JSON.stringify(newRecords));
                 renderRecords(); updateTotalBalanceDisplay(); checkSyncStatus();
@@ -292,6 +290,29 @@
                 console.error(e);
                 if (!silent) alert("讀取失敗，請檢查設定: " + e.message);
             } finally { checkSyncStatus(); }
+        }
+
+        // 獨立出計算邏輯供多處使用
+        function calculateBalancesForList(list) {
+            // 排序：舊 -> 新
+            list.sort((a, b) => {
+                const d = new Date(a.date) - new Date(b.date);
+                return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
+            });
+
+            let runningBal = 0;
+            return list.map(r => {
+                const inc = parseInt(r.income) || 0;
+                const exp = parseInt(r.expense) || 0;
+                
+                if (r.type === '初始餘額') {
+                    runningBal = parseInt(r.balance) || 0;
+                } else {
+                    runningBal = runningBal + inc - exp;
+                    r.balance = runningBal; // 更新物件內的餘額屬性
+                }
+                return { ...r, currentBalance: runningBal }; // currentBalance 用於顯示
+            });
         }
 
         async function sendToSheet(record, form, action = 'create') {
@@ -305,7 +326,15 @@
             try {
                 await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 record.synced = true;
-                saveToLocal(record);
+                
+                // 成功後更新本地狀態
+                let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+                const idx = rs.findIndex(r => r.id === record.id);
+                if (idx !== -1) {
+                    rs[idx].synced = true;
+                    localStorage.setItem('building_records', JSON.stringify(rs));
+                }
+
                 if(action === 'create') alert('成功！');
                 setTimeout(() => downloadFromCloud(true), 800); 
             } catch (e) {
@@ -359,20 +388,6 @@
             downloadFromCloud(false);
         }
 
-        // --- Helpers ---
-        let editingId = null;
-        function saveToLocal(record) {
-            let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
-            const idx = rs.findIndex(r => r.id === record.id);
-            if (idx !== -1) rs[idx] = record; else rs.push(record);
-            rs.sort((a, b) => {
-                const d = new Date(a.date) - new Date(b.date);
-                return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
-            });
-            localStorage.setItem('building_records', JSON.stringify(rs));
-            checkSyncStatus();
-        }
-
         async function handleSubmit(event, type) {
             event.preventDefault();
             const form = event.target;
@@ -382,38 +397,46 @@
                 timestamp: new Date().toLocaleString('zh-TW'),
                 date: data.date, type: type,
                 income: 0, expense: 0,
-                last3: String(data.last3 || '').trim(), desc: '', synced: false
+                last3: String(data.last3 || '').trim(), desc: '', synced: false,
+                balance: 0 // 先預設
             };
             
             if (type === '管理費') { newRecord.desc = `${data.period} (${data.unit})`; newRecord.income = parseInt(data.amount) || 0; }
             else if (type === '車位租借') { newRecord.desc = `車位 ${data.unit} (${data.renter})`; newRecord.income = parseInt(data.amount) || 0; }
             else { newRecord.desc = data.summary; newRecord.income = parseInt(data.income)||0; newRecord.expense = parseInt(data.expense)||0; }
 
-            saveToLocal(newRecord); updateTotalBalanceDisplay();
+            // 1. 取得現有資料
+            let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            
+            // 2. 加入新資料 (或更新)
+            const idx = rs.findIndex(r => r.id === newRecord.id);
+            if (idx !== -1) { rs[idx] = newRecord; } else { rs.push(newRecord); }
+
+            // 3. 重新計算所有餘額，並更新到每一筆資料的 balance 欄位
+            rs = calculateBalancesForList(rs);
+
+            // 4. 取得該筆新資料的正確餘額 (用於發送)
+            const updatedRecord = rs.find(r => r.id === newRecord.id);
+            if(updatedRecord) {
+                newRecord.balance = updatedRecord.currentBalance; // 確保發送時有餘額
+            }
+
+            // 5. 儲存
+            localStorage.setItem('building_records', JSON.stringify(rs));
+            updateTotalBalanceDisplay();
+
             if(editingId) { cancelEdit(); syncPendingRecords(); }
             else { sendToSheet(newRecord, form, 'create'); }
         }
 
-        function calculateBalances(list) {
-            let sorted = [...list].sort((a, b) => {
-                const d = new Date(a.date) - new Date(b.date);
-                return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
-            });
-            let bal = 0;
-            return sorted.map(r => {
-                const inc = parseInt(r.income)||0; const exp = parseInt(r.expense)||0;
-                if(r.type==='初始餘額') bal = parseInt(r.balance)||0;
-                else bal = bal + inc - exp;
-                return { ...r, currentBalance: bal };
-            });
-        }
-
+        // --- UI Rendering ---
         function renderRecords() {
             const tbody = document.getElementById('recordsTableBody');
             const month = document.getElementById('monthFilter').value;
-            let list = calculateBalances(JSON.parse(localStorage.getItem('building_records') || '[]'));
+            // 讀取時再次確保計算 (雖然 save 時已算過，但確保顯示一致)
+            let list = calculateBalancesForList(JSON.parse(localStorage.getItem('building_records') || '[]'));
+            
             let filtered = list.filter(r => {
-                // 排除已刪除的資料
                 if (r.desc && r.desc.includes('(已刪除)')) return false;
                 if (currentFilter!=='all' && r.type!==currentFilter) return false;
                 if (month && !r.date.startsWith(month)) return false;
@@ -454,93 +477,59 @@
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             const index = rs.findIndex(r => r.id === id);
             if(index !== -1) {
-                // 標記為刪除 (修改內容)
                 let record = rs[index];
                 record.desc = `(已刪除) ${record.desc}`;
-                record.income = 0;
-                record.expense = 0;
-                record.synced = false; // 標記未同步以觸發上傳
-                
-                // 更新本地
+                record.income = 0; record.expense = 0;
+                record.synced = false; 
                 rs[index] = record;
-                localStorage.setItem('building_records', JSON.stringify(rs));
                 
-                // 立即同步
-                syncPendingRecords();
-                renderRecords();
-                updateTotalBalanceDisplay();
+                // 刪除後也要重算餘額
+                rs = calculateBalancesForList(rs);
+                
+                localStorage.setItem('building_records', JSON.stringify(rs));
+                syncPendingRecords(); renderRecords(); updateTotalBalanceDisplay();
             }
         }
 
         // 清除重複資料功能
         function cleanDuplicates() {
             if(!confirm("這將會移除內容完全相同(日期/類型/描述/金額)的重複資料，只保留一筆。\n\n確定執行？")) return;
-            
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             const uniqueMap = new Map();
             let removedCount = 0;
-
             rs.forEach(r => {
-                // 建立唯一鍵值：日期+類型+描述+收入+支出
                 const key = `${r.date}|${r.type}|${r.desc}|${r.income}|${r.expense}`;
                 if (uniqueMap.has(key)) {
-                    // 如果已存在，檢查誰是「已同步」的，優先保留已同步的
                     const existing = uniqueMap.get(key);
-                    if (!existing.synced && r.synced) {
-                        uniqueMap.set(key, r); // 替換為已同步版本
-                    }
-                    // 否則保留原有的 (視為重複)
+                    if (!existing.synced && r.synced) uniqueMap.set(key, r); 
                     removedCount++;
-                } else {
-                    uniqueMap.set(key, r);
-                }
+                } else uniqueMap.set(key, r);
             });
-
             if (removedCount > 0) {
-                const newRecords = Array.from(uniqueMap.values());
-                newRecords.sort((a, b) => { 
-                    const d = new Date(a.date) - new Date(b.date);
-                    return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
-                });
+                let newRecords = Array.from(uniqueMap.values());
+                newRecords = calculateBalancesForList(newRecords);
                 localStorage.setItem('building_records', JSON.stringify(newRecords));
-                renderRecords();
-                updateTotalBalanceDisplay();
-                alert(`已移除 ${removedCount} 筆重複資料！`);
-                closeSettingsModal();
-            } else {
-                alert("未發現重複資料。");
-            }
+                renderRecords(); updateTotalBalanceDisplay(); alert(`已移除 ${removedCount} 筆重複資料！`); closeSettingsModal();
+            } else alert("未發現重複資料。");
         }
 
         // 新增：刪除未同步資料
         function deleteUnsyncedRecords() {
             if(!confirm("確定要刪除所有「未同步」的資料嗎？\n這將會遺失尚未上傳到雲端的本機新增/修改紀錄。\n\n此動作無法復原！")) return;
-
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             const originalLength = rs.length;
-            // 只保留已同步的
             const newRs = rs.filter(r => r.synced === true);
             const deletedCount = originalLength - newRs.length;
-
-            if (deletedCount === 0) {
-                alert("沒有發現未同步的資料。");
-                return;
-            }
-
+            if (deletedCount === 0) { alert("沒有發現未同步的資料。"); return; }
             localStorage.setItem('building_records', JSON.stringify(newRs));
-            renderRecords();
-            updateTotalBalanceDisplay();
-            checkSyncStatus();
-            
-            alert(`已刪除 ${deletedCount} 筆未同步的資料。`);
-            closeSettingsModal();
+            renderRecords(); updateTotalBalanceDisplay(); checkSyncStatus();
+            alert(`已刪除 ${deletedCount} 筆未同步的資料。`); closeSettingsModal();
         }
 
         function updateTotalBalanceDisplay() {
-            const rs = JSON.parse(localStorage.getItem('building_records') || '[]');
-            const calculated = calculateBalances(rs);
-            if (calculated.length > 0) {
-                const latest = calculated[calculated.length - 1]; 
+            const rs = calculateBalancesForList(JSON.parse(localStorage.getItem('building_records') || '[]'));
+            if (rs.length > 0) {
+                const latest = rs[rs.length - 1]; 
                 const bal = latest.currentBalance;
                 document.getElementById('totalBalanceDisplay').textContent = (bal !== undefined && !isNaN(bal)) ? `$${bal.toLocaleString()}` : '$0';
             } else {
@@ -549,7 +538,6 @@
         }
 
         // Other UI
-        // let currentFilter='all'; // Removed from here
         function filterRecords(t) { currentFilter=t; document.querySelectorAll('.filter-btn').forEach(b=>b.className='filter-btn px-3 py-1 text-xs rounded text-gray-500 hover:bg-gray-200'); if(document.getElementById('filter-'+(t==='all'?'all':(t==='管理費'?'fee':(t==='車位租借'?'parking':'misc'))))) document.getElementById('filter-'+(t==='all'?'all':(t==='管理費'?'fee':(t==='車位租借'?'parking':'misc')))).className='filter-btn px-3 py-1 text-xs rounded bg-white shadow text-indigo-600 font-bold'; renderRecords(); }
         function editRecord(id) {
             const r = JSON.parse(localStorage.getItem('building_records')).find(x=>x.id===id);
@@ -568,15 +556,11 @@
         }
         function switchTab(t) { document.querySelectorAll('.tab-content').forEach(e=>e.classList.add('hidden-tab')); document.querySelectorAll('.tab-btn').forEach(e=>{e.classList.remove('bg-indigo-100','text-indigo-700');e.classList.add('text-gray-500');}); document.getElementById(`tab-${t}`).classList.remove('hidden-tab'); document.getElementById(`btn-${t}`).classList.add('bg-indigo-100','text-indigo-700'); if(t==='records') filterRecords('all'); }
         function updateParkingPrice() { const s=document.getElementById('parkingSpotSelect').value; document.getElementById('parkingPrice').value = s==='11'?200:(s?800:''); }
-        
-        // Settings
         function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); document.getElementById('gasUrlInput').value=GAS_URL; }
         function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
         function saveSettings() { const u=document.getElementById('gasUrlInput').value.trim(); if(u){localStorage.setItem('building_gas_url',u); GAS_URL=u; alert('已儲存'); closeSettingsModal(); downloadFromCloud(false);} }
         function forceDownload() { downloadFromCloud(false); closeSettingsModal(); }
         function resetSyncStatus() { let rs=JSON.parse(localStorage.getItem('building_records')||'[]'); rs.forEach(r=>r.synced=false); localStorage.setItem('building_records',JSON.stringify(rs)); checkSyncStatus(); renderRecords(); alert('狀態已重置'); }
-
-        // Calc
         let calcVal='0'; const display=document.getElementById('calcDisplay');
         function toggleCalc() { const c=document.getElementById('floatingCalc'); const b=document.getElementById('showCalcBtn'); if(c.classList.contains('hidden')){c.classList.remove('hidden');b.classList.add('hidden');}else{c.classList.add('hidden');b.classList.remove('hidden');} }
         function calcAppend(v) { if(calcVal==='0' && v!=='.') calcVal=v; else calcVal+=v; display.value=calcVal; }
