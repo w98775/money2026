@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>特力屋成家財務管理系統</title>
+    <title>大樓財務管理系統 v6.4 (外觀修復版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- 引入 html2canvas 用於截圖 -->
@@ -53,6 +53,11 @@
             opacity: 1 !important; -webkit-text-fill-color: #111827; color: #111827; 
             background-color: #f3f4f6;
         }
+        /* 修復搜尋框在 iOS 上可能變透明的問題 */
+        input[type="text"], select {
+            background-color: #ffffff;
+        }
+        
         #monthFilter {
             min-height: 30px !important; height: 30px !important; 
             padding: 0 4px !important; background-color: transparent !important;
@@ -61,7 +66,6 @@
         .month-checkbox-label:hover { background-color: #f3f4f6; }
         .month-checkbox { margin-right: 8px; }
         
-        /* 截圖時隱藏的元素 class */
         .hide-on-screenshot { display: none !important; }
     </style>
 </head>
@@ -218,12 +222,12 @@
                 <h2 class="text-lg font-bold text-gray-800 w-full md:w-auto whitespace-nowrap">流水明細</h2>
                 
                 <div class="flex flex-col gap-3 w-full md:flex-row md:items-center md:w-auto">
-                    <!-- 搜尋框 -->
+                    <!-- 搜尋框 (強制加上 bg-white) -->
                     <div class="relative w-full md:w-48">
                         <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400">
                             <i class="fa-solid fa-search"></i>
                         </span>
-                        <input type="text" id="searchInput" oninput="renderRecords()" placeholder="搜尋摘要/後三碼..." class="w-full border border-gray-300 rounded-md py-1.5 pl-8 pr-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <input type="text" id="searchInput" oninput="renderRecords()" placeholder="搜尋摘要/後三碼..." class="w-full border border-gray-300 rounded-md py-1.5 pl-8 pr-2 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white">
                     </div>
 
                     <div class="flex items-center justify-between gap-2 w-full md:w-auto">
@@ -377,30 +381,19 @@
 
         // --- Screenshot Function ---
         function takeScreenshot() {
-            // 自動切換到流水明細 Tab 確保內容可見
             switchTab('records');
-            
-            // 暫時隱藏不必要的元素 (搜尋列、標題按鈕等)
-            // 但保留表格內容。
-            // 使用 class 'screenshot-hide' 來控制欄位 (已在 CSS 定義)
-            
-            // 對手機版卡片，隱藏操作按鈕區
             document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.add('hide-on-screenshot'));
 
             const target = document.getElementById('tab-records');
             
             html2canvas(target, {
-                scale: 2, // 提高解析度
+                scale: 2, 
                 backgroundColor: '#ffffff',
                 ignoreElements: (element) => {
-                    // 忽略截圖時不需要的元素
                     return element.classList.contains('screenshot-hide') || element.id === 'noDataMsg';
                 }
             }).then(canvas => {
-                // 還原隱藏
                 document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.remove('hide-on-screenshot'));
-
-                // 下載圖片
                 const link = document.createElement('a');
                 link.download = `財務明細_${new Date().toISOString().slice(0,10)}.png`;
                 link.href = canvas.toDataURL();
