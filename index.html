@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統 v6.1 (雜項更名版)</title>
+    <title>大樓財務管理系統 v6.2 (多月篩選+合併顯示)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -65,12 +65,19 @@
             background-color: #f3f4f6; /* 淺灰背景 (Tailwind gray-100) */
         }
         
-        /* 針對篩選器的 input 做特殊調整 */
-        #monthFilter {
-            min-height: 30px !important;
-            height: 30px !important; 
-            padding: 0 4px !important;
-            background-color: transparent !important; /* 篩選器保持透明背景 */
+        /* 自訂月份下拉選單樣式 */
+        .month-checkbox-label {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .month-checkbox-label:hover {
+            background-color: #f3f4f6;
+        }
+        .month-checkbox {
+            margin-right: 8px;
         }
     </style>
 </head>
@@ -236,11 +243,21 @@
                     </div>
 
                     <div class="flex items-center justify-between gap-2 w-full md:w-auto">
-                        <!-- 日期篩選 -->
-                        <div class="flex items-center bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm flex-1 md:flex-none">
-                            <i class="fa-solid fa-calendar-days text-gray-500 mr-2"></i>
-                            <span class="text-sm text-gray-500 whitespace-nowrap">日期:</span>
-                            <input type="month" id="monthFilter" onchange="renderRecords()" class="text-sm text-gray-700 bg-transparent border-none focus:ring-0 p-0 ml-1 w-28 outline-none">
+                        <!-- 月份多選篩選器 (取代原本的 type=month) -->
+                        <div class="relative">
+                            <button onclick="toggleMonthDropdown()" class="flex items-center bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm text-sm text-gray-700 whitespace-nowrap h-[30px] hover:bg-gray-50">
+                                <i class="fa-solid fa-calendar-days text-gray-500 mr-2"></i>
+                                <span id="monthFilterLabel">篩選月份 (全)</span>
+                                <i class="fa-solid fa-caret-down ml-2 text-gray-400"></i>
+                            </button>
+                            <!-- 下拉選單內容 -->
+                            <div id="monthDropdownContent" class="hidden absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50 p-2 max-h-60 overflow-y-auto">
+                                <div id="monthCheckboxes" class="flex flex-col gap-1">
+                                    <!-- JS 動態生成選項 -->
+                                </div>
+                            </div>
+                            <!-- 點擊外部關閉遮罩 -->
+                            <div id="monthDropdownOverlay" onclick="toggleMonthDropdown()" class="hidden fixed inset-0 z-40 bg-transparent"></div>
                         </div>
 
                         <!-- 類別篩選 -->
@@ -342,6 +359,7 @@
         if (!GAS_URL) { GAS_URL = DEFAULT_URL; localStorage.setItem('building_gas_url', GAS_URL); }
 
         let currentFilter = 'all';
+        let selectedMonths = new Set(); // 儲存使用者勾選的月份 (格式：YYYY-MM)
 
         let records = JSON.parse(localStorage.getItem('building_records') || '[]');
         
@@ -369,6 +387,7 @@
         // ------------------------------
 
         updateTotalBalanceDisplay();
+        initMonthFilter(); // 初始化月份選項
         renderRecords();
         if (GAS_URL) downloadFromCloud(true); 
 
@@ -416,7 +435,12 @@
                 newRecords = calculateBalancesForList(newRecords);
 
                 localStorage.setItem('building_records', JSON.stringify(newRecords));
-                renderRecords(); updateTotalBalanceDisplay(); checkSyncStatus();
+                
+                // 更新月份選項，確保新下載的資料月份也能被篩選
+                initMonthFilter();
+                renderRecords(); 
+                updateTotalBalanceDisplay(); 
+                checkSyncStatus();
                 if (!silent && updateCount > 0) alert(`已從雲端還原 ${updateCount} 筆資料！`);
                 
             } catch (e) {
@@ -462,6 +486,8 @@
                     form.reset();
                     if(form.querySelector('.date-input')) form.querySelector('.date-input').value = today;
                 }
+                // 更新月份選項 (如果有新月份產生)
+                initMonthFilter();
                 renderRecords(); checkSyncStatus();
             };
 
@@ -536,7 +562,7 @@
         }
 
         // 2. 編輯模式邏輯
-        let editingId = null; // Defined here to be globally accessible
+        let editingId = null; 
 
         async function handleSubmit(event, type) {
             event.preventDefault();
@@ -576,30 +602,133 @@
             updateTotalBalanceDisplay();
             
             // 6. 立即更新畫面 (重要！解決按鈕沒反應的感覺)
+            initMonthFilter(); // 重新生成月份選項
             renderRecords();
 
             if(editingId) { cancelEdit(); syncPendingRecords(); }
             else { sendToSheet(newRecord, form, 'create'); }
         }
 
-        // --- UI Rendering (Updated for Search & Mobile Cards) ---
+        // --- Multi-Month Filter Logic ---
+
+        function initMonthFilter() {
+            let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            // 找出所有不重複的月份
+            let monthSet = new Set();
+            rs.forEach(r => {
+                if (r.date) {
+                    let m = r.date.substring(0, 7); // "YYYY-MM"
+                    // 如果是 2025 的資料，統一視為 2026-01 (用於篩選邏輯顯示)
+                    if (m.startsWith('2025')) {
+                        m = '2026-01';
+                    }
+                    monthSet.add(m);
+                }
+            });
+            // 排序 (新到舊)
+            let sortedMonths = Array.from(monthSet).sort().reverse();
+            
+            // 生成 HTML
+            const container = document.getElementById('monthCheckboxes');
+            container.innerHTML = '';
+            
+            // "全部" 選項
+            const allDiv = document.createElement('div');
+            allDiv.className = 'month-checkbox-label hover:bg-gray-50 p-1 rounded cursor-pointer';
+            allDiv.innerHTML = `<label class="flex items-center w-full cursor-pointer"><input type="checkbox" value="all" class="month-checkbox mr-2" onchange="handleMonthChange(this)" ${selectedMonths.size === 0 ? 'checked' : ''}> <span class="text-sm">全部顯示</span></label>`;
+            container.appendChild(allDiv);
+
+            sortedMonths.forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'month-checkbox-label hover:bg-gray-50 p-1 rounded cursor-pointer';
+                let labelText = m;
+                if (m === '2026-01') labelText = '2026-01 (含2025)'; // 特殊標示
+                
+                div.innerHTML = `<label class="flex items-center w-full cursor-pointer"><input type="checkbox" value="${m}" class="month-checkbox mr-2" onchange="handleMonthChange(this)" ${selectedMonths.has(m) ? 'checked' : ''}> <span class="text-sm">${labelText}</span></label>`;
+                container.appendChild(div);
+            });
+            
+            updateMonthButtonLabel();
+        }
+
+        function toggleMonthDropdown() {
+            const dropdown = document.getElementById('monthDropdownContent');
+            const overlay = document.getElementById('monthDropdownOverlay');
+            if (dropdown.classList.contains('hidden')) {
+                dropdown.classList.remove('hidden');
+                overlay.classList.remove('hidden');
+            } else {
+                dropdown.classList.add('hidden');
+                overlay.classList.add('hidden');
+            }
+        }
+
+        function handleMonthChange(checkbox) {
+            if (checkbox.value === 'all') {
+                if (checkbox.checked) {
+                    selectedMonths.clear();
+                    // 取消其他勾選
+                    document.querySelectorAll('.month-checkbox').forEach(cb => {
+                        if (cb.value !== 'all') cb.checked = false;
+                    });
+                }
+            } else {
+                if (checkbox.checked) {
+                    selectedMonths.add(checkbox.value);
+                    // 取消 "全部"
+                    const allCb = document.querySelector('.month-checkbox[value="all"]');
+                    if (allCb) allCb.checked = false;
+                } else {
+                    selectedMonths.delete(checkbox.value);
+                }
+            }
+            
+            // 如果都沒選，預設回全部
+            if (selectedMonths.size === 0) {
+                 const allCb = document.querySelector('.month-checkbox[value="all"]');
+                 if (allCb) allCb.checked = true;
+            }
+
+            updateMonthButtonLabel();
+            renderRecords();
+        }
+
+        function updateMonthButtonLabel() {
+            const label = document.getElementById('monthFilterLabel');
+            if (selectedMonths.size === 0) {
+                label.textContent = '篩選月份 (全)';
+            } else {
+                label.textContent = `已選 ${selectedMonths.size} 個月份`;
+            }
+        }
+
+
+        // --- UI Rendering (Updated for Multi-Month) ---
         function renderRecords() {
             const tbody = document.getElementById('recordsTableBody');
             const mobileList = document.getElementById('mobileRecordsList');
-            const month = document.getElementById('monthFilter').value;
             const searchKeyword = document.getElementById('searchInput').value.toLowerCase().trim();
 
-            // 讀取時再次確保計算 (雖然 save 時已算過，但確保顯示一致)
             let list = calculateBalancesForList(JSON.parse(localStorage.getItem('building_records') || '[]'));
             
             // Filter logic
             let filtered = list.filter(r => {
                 // 強制轉字串避免 .includes 錯誤
                 const descStr = String(r.desc || '');
-                
                 if (descStr.includes('(已刪除)')) return false;
                 if (currentFilter!=='all' && r.type!==currentFilter) return false;
-                if (month && !r.date.startsWith(month)) return false;
+                
+                // --- 月份篩選邏輯 ---
+                if (selectedMonths.size > 0) {
+                    let rMonth = r.date.substring(0, 7);
+                    // 2025 資料合併邏輯
+                    if (r.date.startsWith('2025')) {
+                        rMonth = '2026-01';
+                    }
+                    if (!selectedMonths.has(rMonth)) return false;
+                }
+                // -------------------
+
                 if (searchKeyword) {
                     const matchDesc = descStr.toLowerCase().includes(searchKeyword);
                     const matchType = String(r.type || '').toLowerCase().includes(searchKeyword);
@@ -609,14 +738,11 @@
                 return true;
             });
             
-            // Reverse for display (Newest first) is usually preferred in UI, 
-            // but the requirement "上傳資料確保以最舊道最新排列" suggests we might want to display sorted by date.
-            // Let's keep display sorted by Date (Oldest to Newest) as per calculation logic, 
-            // OR reverse it for "Latest on top" for better UX? 
-            // Usually accounting shows latest at bottom if it's a running balance, or latest top.
-            // Let's stick to the calculation order (Old -> New) which is consistent with the balance column running down.
-            // However, mobile users might want to see latest at the bottom?
-            // Actually, `calculateBalancesForList` sorts Old->New. We'll display in that order.
+            // Display: Keep calculated order (Old -> New) or reverse for UI?
+            // Usually UI shows Newest First for logs. But accounting balance implies running total.
+            // Current calculateBalances sorts Old->New. 
+            // If we reverse, the balance column might look confusing if reading top-down.
+            // Let's keep Old->New for logical flow of balance accumulation.
             
             tbody.innerHTML = '';
             mobileList.innerHTML = '';
@@ -727,6 +853,7 @@
                 newRecords = calculateBalancesForList(newRecords);
                 localStorage.setItem('building_records', JSON.stringify(newRecords));
                 renderRecords(); updateTotalBalanceDisplay(); alert(`已移除 ${removedCount} 筆重複資料！`); closeSettingsModal();
+                initMonthFilter(); // 重整月份清單
             } else alert("未發現重複資料。");
         }
 
@@ -741,6 +868,7 @@
             localStorage.setItem('building_records', JSON.stringify(newRs));
             renderRecords(); updateTotalBalanceDisplay(); checkSyncStatus();
             alert(`已刪除 ${deletedCount} 筆未同步的資料。`); closeSettingsModal();
+            initMonthFilter(); // 重整月份清單
         }
 
         // 快速匯入5筆管理費功能 (指定資料)
@@ -774,6 +902,7 @@
             alert("已匯入 5 筆資料！系統將自動嘗試同步。");
             closeSettingsModal();
             syncPendingRecords();
+            initMonthFilter(); // 更新月份選項
         }
 
         function updateTotalBalanceDisplay() {
