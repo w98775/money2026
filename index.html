@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>特力屋成家財務管理</title>
+    <title>大樓財務管理系統 v6.1 (雜項更名版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -111,7 +111,7 @@
         <div class="grid grid-cols-4 gap-2 bg-white p-1 rounded-lg shadow">
             <button onclick="switchTab('fee')" id="btn-fee" class="tab-btn py-2 text-sm font-medium rounded-md bg-indigo-100 text-indigo-700">管理費</button>
             <button onclick="switchTab('parking')" id="btn-parking" class="tab-btn py-2 text-sm font-medium rounded-md text-gray-500 hover:bg-gray-50">車位租借</button>
-            <button onclick="switchTab('misc')" id="btn-misc" class="tab-btn py-2 text-sm font-medium rounded-md text-gray-500 hover:bg-gray-50">雜支</button>
+            <button onclick="switchTab('misc')" id="btn-misc" class="tab-btn py-2 text-sm font-medium rounded-md text-gray-500 hover:bg-gray-50">雜項</button>
             <button onclick="switchTab('records')" id="btn-records" class="tab-btn py-2 text-sm font-medium rounded-md text-gray-500 hover:bg-gray-50">流水明細</button>
         </div>
 
@@ -193,10 +193,10 @@
             </form>
         </div>
 
-        <!-- 雜支 -->
+        <!-- 雜項 (原雜支) -->
         <div id="tab-misc" class="tab-content hidden-tab bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">雜支紀錄</h2>
-            <form onsubmit="handleSubmit(event, '雜支')" id="form-misc" class="space-y-4">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">雜項紀錄</h2>
+            <form onsubmit="handleSubmit(event, '雜項')" id="form-misc" class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">日期</label>
                     <input type="date" name="date" class="date-input block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" required>
@@ -216,7 +216,7 @@
                     </div>
                 </div>
                 <button type="submit" class="submit-btn w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200 mt-2">
-                    <i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜支
+                    <i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜項
                 </button>
             </form>
         </div>
@@ -248,7 +248,7 @@
                             <button onclick="filterRecords('all')" id="filter-all" class="filter-btn px-3 py-1 text-xs font-bold rounded bg-white shadow text-indigo-600 whitespace-nowrap">全部</button>
                             <button onclick="filterRecords('管理費')" id="filter-fee" class="filter-btn px-3 py-1 text-xs rounded text-gray-500 whitespace-nowrap">管理費</button>
                             <button onclick="filterRecords('車位租借')" id="filter-parking" class="filter-btn px-3 py-1 text-xs rounded text-gray-500 whitespace-nowrap">車位</button>
-                            <button onclick="filterRecords('雜支')" id="filter-misc" class="filter-btn px-3 py-1 text-xs rounded text-gray-500 whitespace-nowrap">雜支</button>
+                            <button onclick="filterRecords('雜項')" id="filter-misc" class="filter-btn px-3 py-1 text-xs rounded text-gray-500 whitespace-nowrap">雜項</button>
                         </div>
                     </div>
                 </div>
@@ -345,6 +345,14 @@
 
         let records = JSON.parse(localStorage.getItem('building_records') || '[]');
         
+        // --- 舊資料自動遷移：雜支 -> 雜項 ---
+        let migrated = false;
+        records.forEach(r => {
+            if (r.type === '雜支') {
+                r.type = '雜項';
+                migrated = true;
+            }
+        });
         // --- 強制清除舊的預設資料 ---
         const initialLen = records.length;
         records = records.filter(r => {
@@ -355,7 +363,7 @@
             return true;
         });
 
-        if (records.length !== initialLen) {
+        if (migrated || records.length !== initialLen) {
             localStorage.setItem('building_records', JSON.stringify(records));
         }
         // ------------------------------
@@ -388,6 +396,9 @@
                 let updateCount = 0;
                 
                 cloudData.forEach(cloudRecord => {
+                    // 下載時也做遷移檢查
+                    if (cloudRecord.type === '雜支') cloudRecord.type = '雜項';
+
                     if (localMap.has(cloudRecord.id)) {
                         const localRecord = localMap.get(cloudRecord.id);
                         if (localRecord.synced) { 
@@ -446,7 +457,7 @@
                 if (form && action === 'create') {
                     if (form.id === 'form-fee') btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>提交管理費';
                     else if (form.id === 'form-parking') btn.innerHTML = '<i class="fa-solid fa-car mr-2"></i>登記車位';
-                    else btn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜支';
+                    else btn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜項';
                     btn.disabled = false;
                     form.reset();
                     if(form.querySelector('.date-input')) form.querySelector('.date-input').value = today;
@@ -583,13 +594,16 @@
             
             // Filter logic
             let filtered = list.filter(r => {
-                if (r.desc && r.desc.includes('(已刪除)')) return false;
+                // 強制轉字串避免 .includes 錯誤
+                const descStr = String(r.desc || '');
+                
+                if (descStr.includes('(已刪除)')) return false;
                 if (currentFilter!=='all' && r.type!==currentFilter) return false;
                 if (month && !r.date.startsWith(month)) return false;
                 if (searchKeyword) {
-                    const matchDesc = r.desc.toLowerCase().includes(searchKeyword);
-                    const matchType = r.type.toLowerCase().includes(searchKeyword);
-                    const matchLast3 = (r.last3 || '').includes(searchKeyword);
+                    const matchDesc = descStr.toLowerCase().includes(searchKeyword);
+                    const matchType = String(r.type || '').toLowerCase().includes(searchKeyword);
+                    const matchLast3 = String(r.last3 || '').includes(searchKeyword);
                     if (!matchDesc && !matchType && !matchLast3) return false;
                 }
                 return true;
@@ -616,7 +630,7 @@
                 let badge = 'bg-gray-100 text-gray-600';
                 if(r.type==='管理費') badge='bg-blue-100 text-blue-800';
                 if(r.type==='車位租借') badge='bg-green-100 text-green-800';
-                if(r.type==='雜支') badge='bg-orange-100 text-orange-800';
+                if(r.type==='雜項') badge='bg-orange-100 text-orange-800';
                 
                 let icon = r.synced ? '<span class="text-green-500"><i class="fa-solid fa-check"></i></span>' : '<span class="text-orange-500"><i class="fa-solid fa-arrow-up"></i></span>';
                 let action = '';
