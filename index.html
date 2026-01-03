@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統 v5.4 (篩選器顯示優化)</title>
+    <title>大樓財務管理系統 v5.5 (iOS修復版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -40,17 +40,19 @@
             width: 90%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
         }
         
-        /* 強制修正 iOS date input 的預設外觀 */
+        /* 修復 iOS 日期輸入框問題：移除 appearance: none 以恢復原生點擊行為 */
         input[type="date"], input[type="month"] {
-            -webkit-appearance: none; /* 移除 Safari 預設樣式 */
-            appearance: none;
-            background-color: white;
-            min-height: 42px; /* 確保表單內的高度足夠 */
+            /* -webkit-appearance: none;  <-- 移除此行，這是導致 iOS 無反應的主因 */
+            background-color: #ffffff;
+            min-height: 42px; /* 確保有足夠的點擊高度 */
+            cursor: pointer; /* 提示可點擊 */
         }
-        /* 針對篩選器的 input 做特殊調整，避免高度過高 */
+        
+        /* 針對篩選器的 input 做特殊調整 */
         #monthFilter {
-            min-height: auto !important;
-            padding: 0;
+            min-height: 30px !important; /* 篩選器不需要太高 */
+            padding: 0 4px;
+            background-color: transparent;
         }
     </style>
 </head>
@@ -206,7 +208,7 @@
                 <h2 class="text-lg font-bold text-gray-800">流水明細</h2>
                 
                 <div class="flex flex-wrap items-center gap-2 justify-end w-full md:w-auto">
-                    <!-- 改良後的日期篩選器：增加容器、圖示與文字標籤 -->
+                    <!-- 改良後的日期篩選器 -->
                     <div class="flex items-center bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm">
                         <i class="fa-solid fa-calendar-days text-gray-500 mr-2"></i>
                         <span class="text-sm text-gray-500 whitespace-nowrap">日期:</span>
