@@ -3,13 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統 v6.9 (精簡版)</title>
+    <title>大樓財務管理系統 v7.0 </title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 引入 html2canvas 用於截圖 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: "Noto Sans TC", sans-serif; background-color: #f3f4f6; padding-bottom: 120px; }
         .hidden-tab { display: none; }
-        
+        .floating-calc {
+            position: fixed; bottom: 20px; right: 20px; width: 220px;
+            background-color: #1f2937; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); z-index: 100;
+            padding: 10px; transform: scale(0.9); transform-origin: bottom right;
+        }
+        .calc-btn { height: 40px; font-size: 1rem; transition: all 0.1s; }
+        .calc-btn:active { transform: scale(0.95); }
+        .calc-display {
+            background-color: #111827; color: #4ade80; font-family: monospace;
+            font-size: 1.5rem; text-align: right; padding: 8px;
+            border-radius: 6px; margin-bottom: 10px;
+        }
+        .calc-toggle {
+            position: absolute; top: -30px; right: 0; background: #1f2937;
+            color: white; padding: 4px 12px; border-radius: 6px 6px 0 0;
+            cursor: pointer; font-size: 0.8rem;
+        }
         @keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         .balance-card { animation: fadeInDown 0.5s ease-out; }
         .editing-mode { border: 2px solid #f59e0b; background-color: #fffbeb; }
@@ -47,17 +66,7 @@
         .month-checkbox-label:hover { background-color: #f3f4f6; }
         .month-checkbox { margin-right: 8px; }
         
-        /* === iOS 截圖背景位移終極修復 === */
-        .type-badge {
-            display: inline-block;
-            vertical-align: middle;
-            height: 1.5rem;          /* 物理行高補償 */
-            line-height: 1.55rem;    /* 將文字稍微「壓」回中心 */
-            margin-top: -2px;        /* 基準線微調 */
-            transform: translateZ(0); /* 渲染層強制隔離 (GPU加速) */
-            padding: 0 0.5rem;       /* 左右 padding */
-            border-radius: 0.25rem;
-        }
+        .hide-on-screenshot { display: none !important; }
     </style>
 </head>
 <body>
@@ -209,7 +218,7 @@
 
         <div id="tab-records" class="tab-content hidden-tab bg-white p-4 rounded-lg shadow-md">
             <!-- 搜尋與篩選區 -->
-            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-4 gap-4">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-4 gap-4 screenshot-hide">
                 <h2 class="text-lg font-bold text-gray-800 w-full md:w-auto whitespace-nowrap">流水明細</h2>
                 
                 <div class="flex flex-col gap-3 w-full md:flex-row md:items-center md:w-auto">
@@ -251,7 +260,7 @@
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-2 py-2 text-left">日期</th><th class="px-2 py-2 text-left">摘要</th><th class="px-2 py-2 text-right">收入</th><th class="px-2 py-2 text-right">支出</th><th class="px-2 py-2 text-right">結餘</th><th class="px-2 py-2 text-left">後三碼</th><th class="px-2 py-2 text-center">狀態</th><th class="px-2 py-2 text-center">操作</th>
+                            <th class="px-2 py-2 text-left">日期</th><th class="px-2 py-2 text-left">摘要</th><th class="px-2 py-2 text-right">收入</th><th class="px-2 py-2 text-right">支出</th><th class="px-2 py-2 text-right">結餘</th><th class="px-2 py-2 text-left">後三碼</th><th class="px-2 py-2 text-center screenshot-hide">狀態</th><th class="px-2 py-2 text-center screenshot-hide">操作</th>
                         </tr>
                     </thead>
                     <tbody id="recordsTableBody" class="bg-white divide-y divide-gray-200"></tbody>
@@ -295,6 +304,42 @@
         </div>
     </div>
 
+    <!-- 浮動按鈕區 -->
+    <div class="fixed bottom-5 right-5 flex flex-col gap-2 z-50">
+        <!-- 截圖按鈕 -->
+        <button onclick="takeScreenshot()" class="w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition" title="一鍵截圖">
+            <i class="fa-solid fa-camera"></i>
+        </button>
+
+        <!-- 計算機開關 -->
+        <button onclick="toggleCalc()" id="showCalcBtn" class="w-12 h-12 bg-gray-800 text-white rounded-full shadow-lg flex items-center justify-center"><i class="fa-solid fa-calculator"></i></button>
+    </div>
+
+    <div id="floatingCalc" class="floating-calc hidden">
+        <div class="calc-toggle" onclick="toggleCalc()"><i class="fa-solid fa-calculator"></i> 收合</div>
+        <input type="text" id="calcDisplay" readonly class="calc-display w-full" value="0">
+        <div class="grid grid-cols-4 gap-2">
+            <button onclick="calcClear()" class="calc-btn col-span-2 bg-red-600 rounded text-white font-bold">AC</button>
+            <button onclick="calcDelete()" class="calc-btn bg-gray-600 rounded text-white"><i class="fa-solid fa-delete-left"></i></button>
+            <button onclick="calcAppend('/')" class="calc-btn bg-orange-600 rounded text-white">÷</button>
+            <button onclick="calcAppend('7')" class="calc-btn bg-gray-700 rounded text-white">7</button>
+            <button onclick="calcAppend('8')" class="calc-btn bg-gray-700 rounded text-white">8</button>
+            <button onclick="calcAppend('9')" class="calc-btn bg-gray-700 rounded text-white">9</button>
+            <button onclick="calcAppend('*')" class="calc-btn bg-orange-600 rounded text-white">×</button>
+            <button onclick="calcAppend('4')" class="calc-btn bg-gray-700 rounded text-white">4</button>
+            <button onclick="calcAppend('5')" class="calc-btn bg-gray-700 rounded text-white">5</button>
+            <button onclick="calcAppend('6')" class="calc-btn bg-gray-700 rounded text-white">6</button>
+            <button onclick="calcAppend('-')" class="calc-btn bg-orange-600 rounded text-white">-</button>
+            <button onclick="calcAppend('1')" class="calc-btn bg-gray-700 rounded text-white">1</button>
+            <button onclick="calcAppend('2')" class="calc-btn bg-gray-700 rounded text-white">2</button>
+            <button onclick="calcAppend('3')" class="calc-btn bg-gray-700 rounded text-white">3</button>
+            <button onclick="calcAppend('+')" class="calc-btn bg-orange-600 rounded text-white">+</button>
+            <button onclick="calcAppend('0')" class="calc-btn col-span-2 bg-gray-700 rounded text-white">0</button>
+            <button onclick="calcAppend('.')" class="calc-btn bg-gray-700 rounded text-white">.</button>
+            <button onclick="calcResult()" class="calc-btn bg-blue-600 rounded text-white">=</button>
+        </div>
+    </div>
+
     <script>
         const today = new Date().toISOString().split('T')[0];
         document.querySelectorAll('.date-input').forEach(el => el.value = today);
@@ -333,6 +378,36 @@
         document.addEventListener("visibilitychange", function() {
             if (!document.hidden && GAS_URL) downloadFromCloud(true);
         });
+
+        // --- Screenshot Function ---
+        function takeScreenshot() {
+            switchTab('records');
+            document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.add('hide-on-screenshot'));
+
+            // 滾動到頂部
+            window.scrollTo(0,0);
+
+            const target = document.getElementById('tab-records');
+            
+            html2canvas(target, {
+                scale: 2, 
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                ignoreElements: (element) => {
+                    return element.classList.contains('screenshot-hide') || element.id === 'noDataMsg';
+                }
+            }).then(canvas => {
+                document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.remove('hide-on-screenshot'));
+                const link = document.createElement('a');
+                link.download = `財務明細_${new Date().toISOString().slice(0,10)}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+            }).catch(err => {
+                console.error(err);
+                alert('截圖失敗，請重試');
+                document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.remove('hide-on-screenshot'));
+            });
+        }
 
         // --- Core Functions ---
         async function downloadFromCloud(silent = false) {
@@ -670,10 +745,10 @@
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-50";
                 
-                // --- iOS 截圖修復關鍵：使用 type-badge class ---
+                // --- iOS 截圖修復關鍵：使用 inline-block + align-middle + leading-4 ---
                 tr.innerHTML = `<td class="px-2 py-3 text-gray-600 whitespace-nowrap">${r.date}</td>
                     <td class="px-2 py-3">
-                        <span class="type-badge text-xs font-bold mr-1 ${badge}">${r.type}</span>${r.desc}
+                        <span class="inline-block align-middle text-xs font-bold mr-1 ${badge} px-2 py-1 rounded whitespace-nowrap leading-4" style="transform: translateZ(0);">${r.type}</span>${r.desc}
                     </td>
                     <td class="px-2 py-3 text-right font-medium">${inc}</td>
                     <td class="px-2 py-3 text-right font-medium">${exp}</td>
@@ -692,7 +767,7 @@
                             <span class="text-gray-500 text-xs">${r.date}</span>
                             <div class="font-bold text-gray-800 text-lg">${r.desc}</div>
                         </div>
-                        <span class="type-badge text-xs font-bold ${badge}">${r.type}</span>
+                        <span class="inline-block align-middle text-xs font-bold ${badge} px-2 py-1 rounded leading-4" style="transform: translateZ(0);">${r.type}</span>
                     </div>
                     <div class="flex justify-between items-center mb-2">
                         <div class="text-sm">
