@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統</title>
+    <title>大樓財務管理系統 v5.4 (篩選器顯示優化)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -41,11 +41,16 @@
         }
         
         /* 強制修正 iOS date input 的預設外觀 */
-        input[type="date"] {
+        input[type="date"], input[type="month"] {
             -webkit-appearance: none; /* 移除 Safari 預設樣式 */
             appearance: none;
             background-color: white;
-            min-height: 42px; /* 確保高度足夠 */
+            min-height: 42px; /* 確保表單內的高度足夠 */
+        }
+        /* 針對篩選器的 input 做特殊調整，避免高度過高 */
+        #monthFilter {
+            min-height: auto !important;
+            padding: 0;
         }
     </style>
 </head>
@@ -110,7 +115,6 @@
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">繳納日期</label>
-                        <!-- 更新日期輸入框樣式：bg-white, border-gray-300, text-base, py-2 -->
                         <input type="date" name="date" class="date-input block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" required>
                     </div>
                     <div>
@@ -200,8 +204,15 @@
         <div id="tab-records" class="tab-content hidden-tab bg-white p-4 rounded-lg shadow-md">
             <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-2 gap-2">
                 <h2 class="text-lg font-bold text-gray-800">流水明細</h2>
-                <div class="flex flex-wrap items-center gap-2">
-                    <input type="month" id="monthFilter" onchange="renderRecords()" class="border rounded px-2 py-1 text-sm text-gray-700">
+                
+                <div class="flex flex-wrap items-center gap-2 justify-end w-full md:w-auto">
+                    <!-- 改良後的日期篩選器：增加容器、圖示與文字標籤 -->
+                    <div class="flex items-center bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm">
+                        <i class="fa-solid fa-calendar-days text-gray-500 mr-2"></i>
+                        <span class="text-sm text-gray-500 whitespace-nowrap">日期:</span>
+                        <input type="month" id="monthFilter" onchange="renderRecords()" class="text-sm text-gray-700 bg-transparent border-none focus:ring-0 p-0 ml-1 w-28 outline-none">
+                    </div>
+
                     <div class="flex space-x-1 bg-gray-100 p-1 rounded">
                         <button onclick="filterRecords('all')" id="filter-all" class="filter-btn px-3 py-1 text-xs font-bold rounded bg-white shadow text-indigo-600">全部</button>
                         <button onclick="filterRecords('管理費')" id="filter-fee" class="filter-btn px-3 py-1 text-xs rounded text-gray-500">管理費</button>
