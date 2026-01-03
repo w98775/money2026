@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統 v6.6 (iOS截圖終極修復版)</title>
+    <title>大樓財務管理系統 v6.7 (iOS截圖渲染修正版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- 引入 html2canvas 用於截圖 -->
@@ -745,11 +745,10 @@
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-50";
                 
-                // --- iOS 截圖修復關鍵：使用 inline-flex 取代 inline-block，確保背景完整 ---
+                // --- iOS 截圖修復關鍵：使用 inline-block + align-middle + leading-4 ---
                 tr.innerHTML = `<td class="px-2 py-3 text-gray-600 whitespace-nowrap">${r.date}</td>
                     <td class="px-2 py-3">
-                        <span class="inline-flex items-center justify-center text-xs font-bold mr-1 ${badge} px-2 py-1 rounded whitespace-nowrap leading-none">${r.type}</span>
-                        ${r.desc}
+                        <span class="inline-block align-middle text-xs font-bold mr-1 ${badge} px-2 py-1 rounded whitespace-nowrap leading-4" style="transform: translateZ(0);">${r.type}</span>${r.desc}
                     </td>
                     <td class="px-2 py-3 text-right font-medium">${inc}</td>
                     <td class="px-2 py-3 text-right font-medium">${exp}</td>
@@ -768,7 +767,7 @@
                             <span class="text-gray-500 text-xs">${r.date}</span>
                             <div class="font-bold text-gray-800 text-lg">${r.desc}</div>
                         </div>
-                        <span class="inline-flex items-center justify-center text-xs font-bold ${badge} px-2 py-1 rounded leading-none">${r.type}</span>
+                        <span class="inline-block align-middle text-xs font-bold ${badge} px-2 py-1 rounded leading-4" style="transform: translateZ(0);">${r.type}</span>
                     </div>
                     <div class="flex justify-between items-center mb-2">
                         <div class="text-sm">
