@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大樓財務管理系統 v3.8</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: "Noto Sans TC", sans-serif; background-color: #f3f4f6; padding-bottom: 120px; }
+        .hidden-tab { display: none; }
+        
+        /* 懸浮計算機樣式 */
+        .floating-calc {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 220px;
+            background-color: #1f2937;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 100;
+            padding: 10px;
+            transform: scale(0.9);
+            transform-origin: bottom right;
+        }
+        .calc-btn {
+            height: 40px;
+            font-size: 1rem;
+            transition: all 0.1s;
+        }
+        .calc-btn:active { transform: scale(0.95); }
+        .calc-display {
+            background-color: #111827;
+            color: #4ade80;
+            font-family: monospace;
+            font-size: 1.5rem;
+            text-align: right;
+            padding: 8px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        
+        .calc-toggle {
+            position: absolute;
+            top: -30px;
+            right: 0;
+            background: #1f2937;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .balance-card { animation: fadeInDown 0.5s ease-out; }
+        
+        /* 修改模式的醒目提示 */
+        .editing-mode {
+            border: 2px solid #f59e0b;
+            background-color: #fffbeb;
+        }
+
+        /* 模態視窗 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+        }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部標題 -->
+    <header class="bg-indigo-900 text-white p-4 shadow-md sticky top-0 z-40">
+        <div class="flex justify-between items-center max-w-3xl mx-auto">
+            <h1 class="text-xl font-bold"><i class="fa-solid fa-building-columns mr-2"></i>大樓財務管理</h1>
+            
+            <div class="flex items-center gap-2">
+                <!-- 下載按鈕 -->
+                <button id="downloadBtn" onclick="downloadFromCloud()" class="flex items-center gap-2 px-3 py-1.5 rounded bg-blue-600 border border-blue-500 hover:bg-blue-500 transition text-sm shadow-sm" title="從雲端下載最新資料">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> 
+                    <span class="hidden sm:inline">下載更新</span>
+                </button>
+
+                <!-- 同步(上傳)按鈕 -->
+                <button id="headerSyncBtn" onclick="handleSyncClick()" class="flex items-center gap-2 px-3 py-1.5 rounded bg-indigo-800 border border-indigo-600 hover:bg-indigo-700 transition text-sm shadow-sm">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> 
+                    <span id="headerSyncText">檢查連線...</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto p-4 space-y-6">
+        
+        <!-- 大樓零用金餘額 -->
+        <div class="balance-card bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-5 rounded-xl shadow-lg flex justify-between items-center">
+            <div>
+                <p class="text-indigo-100 text-sm font-medium mb-1">大樓零用金餘額</p>
+                <p class="text-4xl font-bold tracking-tight" id="totalBalanceDisplay">計算中...</p>
+            </div>
+            <div class="text-5xl text-white opacity-20">
+                <i class="fa-solid fa-coins"></i>
+            </div>
+        </div>
+
+        <!-- 修改模式提示條 -->
+        <div id="editModeBanner" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded shadow-md flex justify-between items-center">
+            <div>
+                <p class="font-bold"><i class="fa-solid fa-pen-to-square"></i> 正在修改資料</p>
+                <p class="text-sm">請修改下方表單內容，完成後點擊「確認修改」。</p>
+            </div>
+            <button onclick="cancelEdit()" class="bg-white text-yellow-700 border border-yellow-500 px-3 py-1 rounded text-sm hover:bg-yellow-50">
+                取消
+            </button>
+        </div>
+
+        <!-- 主選單頁籤 -->
+        <div class="grid grid-cols-4 gap-2 bg-white p-1 rounded-lg shadow">
+            <button onclick="switchTab('fee')" id="btn-fee" class="tab-btn py-2 text-sm font-medium rounded-md bg-indigo-100 text-indigo-700">管理費</button>
+            <button onclick="switchTab('parking')" id="btn-parking" class="tab-btn py-2 text-sm font-medium rounded-md text-gray-500 hover:bg-gray-50">車位租借</button>
+            <button onclick="switchTab('misc')" id="btn-misc" class="tab-btn py-2 text-sm font-medium rounded-md text-gray-500 hover:bg-gray-50">雜支</button>
+            <button onclick="switchTab('records')" id="btn-records" class="tab-btn py-2 text-sm font-medium rounded-md text-gray-500 hover:bg-gray-50">流水明細</button>
+        </div>
+
+        <!-- 1. 管理費繳納 -->
+        <div id="tab-fee" class="tab-content bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">繳納管理費</h2>
+            <form onsubmit="handleSubmit(event, '管理費')" id="form-fee" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">戶號 (如 3-2)</label>
+                        <input type="text" name="unit" required placeholder="3-2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">繳納年度</label>
+                        <select name="period" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 bg-white">
+                            <option value="115-上">115-上年度</option>
+                            <option value="115-下">115-下年度</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">繳納日期</label>
+                        <input type="date" name="date" class="date-input mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">金額 (固定)</label>
+                        <input type="number" name="amount" value="4800" readonly class="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm border p-2 cursor-not-allowed">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">帳號後三碼</label>
+                    <input type="text" name="last3" maxlength="5" placeholder="081" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2">
+                </div>
+                <button type="submit" class="submit-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200">
+                    <i class="fa-solid fa-check mr-2"></i>提交管理費
+                </button>
+            </form>
+        </div>
+
+        <!-- 2. 車位租借 -->
+        <div id="tab-parking" class="tab-content hidden-tab bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">車位租借登記</h2>
+            <form onsubmit="handleSubmit(event, '車位租借')" id="form-parking" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">車位號碼</label>
+                        <select name="unit" id="parkingSpotSelect" onchange="updateParkingPrice()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 bg-white" required>
+                            <option value="" disabled selected>請選擇</option>
+                            <option value="8">8號</option>
+                            <option value="11">11號</option>
+                            <option value="31">31號</option>
+                            <option value="32">32號</option>
+                            <option value="33">33號</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">租借人 (戶號)</label>
+                        <input type="text" name="renter" required placeholder="如: 2-2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">匯款日期</label>
+                        <input type="date" name="date" class="date-input mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">金額</label>
+                        <input type="number" name="amount" id="parkingPrice" readonly placeholder="選擇車位後自動帶入" class="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm border p-2">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">帳號後三碼</label>
+                    <input type="text" name="last3" maxlength="5" placeholder="081" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2">
+                </div>
+                <button type="submit" class="submit-btn w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200">
+                    <i class="fa-solid fa-car mr-2"></i>登記車位
+                </button>
+            </form>
+        </div>
+
+        <!-- 3. 雜支 -->
+        <div id="tab-misc" class="tab-content hidden-tab bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">雜支紀錄</h2>
+            <form onsubmit="handleSubmit(event, '雜支')" id="form-misc" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">日期</label>
+                    <input type="date" name="date" class="date-input mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">摘要</label>
+                    <input type="text" name="summary" required placeholder="如：購買燈泡、清潔用品" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">收入</label>
+                        <input type="number" name="income" placeholder="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">支出</label>
+                        <input type="number" name="expense" placeholder="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2">
+                    </div>
+                </div>
+                <button type="submit" class="submit-btn w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200">
+                    <i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜支
+                </button>
+            </form>
+        </div>
+
+        <!-- 4. 流水明細 -->
+        <div id="tab-records" class="tab-content hidden-tab bg-white p-4 rounded-lg shadow-md">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-2 gap-2">
+                <h2 class="text-lg font-bold text-gray-800">流水明細</h2>
+                
+                <div class="flex flex-wrap items-center gap-2">
+                    <input type="month" id="monthFilter" onchange="renderRecords()" class="border rounded px-2 py-1 text-sm text-gray-700">
+                    <div class="flex space-x-1 bg-gray-100 p-1 rounded">
+                        <button onclick="filterRecords('all')" id="filter-all" class="filter-btn px-3 py-1 text-xs rounded bg-white shadow text-indigo-600 font-bold">全部</button>
+                        <button onclick="filterRecords('管理費')" id="filter-fee" class="filter-btn px-3 py-1 text-xs rounded text-gray-500">管理費</button>
+                        <button onclick="filterRecords('車位租借')" id="filter-parking" class="filter-btn px-3 py-1 text-xs rounded text-gray-500">車位</button>
+                        <button onclick="filterRecords('雜支')" id="filter-misc" class="filter-btn px-3 py-1 text-xs rounded text-gray-500">雜支</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-2 py-2 text-left whitespace-nowrap text-gray-500">日期</th>
+                            <th class="px-2 py-2 text-left whitespace-nowrap text-gray-500">項目/摘要</th>
+                            <th class="px-2 py-2 text-right whitespace-nowrap text-gray-500">收入</th>
+                            <th class="px-2 py-2 text-right whitespace-nowrap text-gray-500">支出</th>
+                            <th class="px-2 py-2 text-right whitespace-nowrap text-gray-500">結餘</th>
+                            <th class="px-2 py-2 text-left whitespace-nowrap text-gray-500">後三碼</th>
+                            <th class="px-2 py-2 text-center whitespace-nowrap text-gray-500">狀態</th>
+                            <th class="px-2 py-2 text-center whitespace-nowrap text-gray-500">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsTableBody" class="bg-white divide-y divide-gray-200">
+                        <!-- JS Render -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="noDataMsg" class="text-center text-gray-400 py-8 hidden">無符合資料</div>
+        </div>
+
+    </main>
+
+    <!-- 設定模態視窗 -->
+    <div id="settingsModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 class="text-lg font-bold mb-4 text-gray-800">Google Sheet 連線設定</h3>
+            <p class="mb-2 text-xs text-gray-500">首次使用請貼上 Apps Script 網址：</p>
+            <input type="text" id="gasUrlInput" placeholder="https://script.google.com/..." class="w-full border rounded p-2 mb-4 text-sm bg-gray-50 text-gray-700">
+            <div class="flex justify-between gap-2">
+                <button onclick="resetSyncStatus()" class="px-3 py-2 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200 border border-red-300">
+                    <i class="fa-solid fa-rotate-left"></i> 重置所有同步狀態
+                </button>
+                <div class="flex gap-2">
+                    <button onclick="closeSettingsModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded">取消</button>
+                    <button onclick="saveSettings()" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">儲存並連線</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 懸浮計算機 -->
+    <div id="floatingCalc" class="floating-calc hidden">
+        <div class="calc-toggle" onclick="toggleCalc()">
+            <i class="fa-solid fa-calculator"></i> 收合
+        </div>
+        <input type="text" id="calcDisplay" readonly class="calc-display w-full" value="0">
+        <div class="grid grid-cols-4 gap-2">
+            <button onclick="calcClear()" class="calc-btn col-span-2 bg-red-600 rounded text-white font-bold">AC</button>
+            <button onclick="calcDelete()" class="calc-btn bg-gray-600 rounded text-white"><i class="fa-solid fa-delete-left"></i></button>
+            <button onclick="calcAppend('/')" class="calc-btn bg-orange-600 rounded text-white">÷</button>
+            <button onclick="calcAppend('7')" class="calc-btn bg-gray-700 rounded text-white">7</button>
+            <button onclick="calcAppend('8')" class="calc-btn bg-gray-700 rounded text-white">8</button>
+            <button onclick="calcAppend('9')" class="calc-btn bg-gray-700 rounded text-white">9</button>
+            <button onclick="calcAppend('*')" class="calc-btn bg-orange-600 rounded text-white">×</button>
+            <button onclick="calcAppend('4')" class="calc-btn bg-gray-700 rounded text-white">4</button>
+            <button onclick="calcAppend('5')" class="calc-btn bg-gray-700 rounded text-white">5</button>
+            <button onclick="calcAppend('6')" class="calc-btn bg-gray-700 rounded text-white">6</button>
+            <button onclick="calcAppend('-')" class="calc-btn bg-orange-600 rounded text-white">-</button>
+            <button onclick="calcAppend('1')" class="calc-btn bg-gray-700 rounded text-white">1</button>
+            <button onclick="calcAppend('2')" class="calc-btn bg-gray-700 rounded text-white">2</button>
+            <button onclick="calcAppend('3')" class="calc-btn bg-gray-700 rounded text-white">3</button>
+            <button onclick="calcAppend('+')" class="calc-btn bg-orange-600 rounded text-white">+</button>
+            <button onclick="calcAppend('0')" class="calc-btn col-span-2 bg-gray-700 rounded text-white">0</button>
+            <button onclick="calcAppend('.')" class="calc-btn bg-gray-700 rounded text-white">.</button>
+            <button onclick="calcResult()" class="calc-btn bg-blue-600 rounded text-white">=</button>
+        </div>
+    </div>
+    
+    <button onclick="toggleCalc()" id="showCalcBtn" class="fixed bottom-5 right-5 w-12 h-12 bg-gray-800 text-white rounded-full shadow-lg flex items-center justify-center z-50">
+        <i class="fa-solid fa-calculator"></i>
+    </button>
+
+    <script>
+        // --- 1. 初始化 ---
+        const today = new Date().toISOString().split('T')[0];
+        document.querySelectorAll('.date-input').forEach(el => el.value = today);
+
+        function uuid() {
+            return 'id-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // 預設 URL
+        const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbya7d1pikyQTO7EEpQOjDmb0Dykv9jO9G_rzRHEuhgyULHfg1oJAn6gS3I7Msw32l6ISA/exec';
+        let GAS_URL = localStorage.getItem('building_gas_url');
+        if (!GAS_URL) {
+            GAS_URL = DEFAULT_URL;
+            localStorage.setItem('building_gas_url', GAS_URL);
+        }
+
+        let records = JSON.parse(localStorage.getItem('building_records') || '[]');
+        let hasChanges = false;
+        
+        if (records.length === 0) {
+            records = [
+                {
+                    id: uuid(),
+                    type: '初始餘額',
+                    date: '2025-12-31',
+                    desc: '上年度餘額',
+                    income: 0,
+                    expense: 0,
+                    balance: 378129,
+                    last3: '',
+                    timestamp: '2024/12/31 下午11:59:59',
+                    synced: false
+                },
+                {
+                    id: uuid(),
+                    type: '車位租借',
+                    date: '2026-01-02', 
+                    desc: '車位 31 (2-2)',
+                    income: 800,
+                    expense: 0,
+                    last3: '081',
+                    timestamp: '2025/1/2 下午00:00:00',
+                    synced: false
+                }
+            ];
+            hasChanges = true;
+        } else {
+            records.forEach(r => {
+                if (!r.id) { r.id = uuid(); hasChanges = true; }
+                if (r.synced === undefined) { r.synced = false; hasChanges = true; }
+            });
+        }
+        
+        // 排序：日期由舊到新
+        records.sort((a, b) => {
+            const dateDiff = new Date(a.date) - new Date(b.date);
+            if(dateDiff !== 0) return dateDiff;
+            return new Date(a.timestamp) - new Date(b.timestamp);
+        });
+        
+        if (hasChanges) {
+            localStorage.setItem('building_records', JSON.stringify(records));
+        }
+
+        updateTotalBalanceDisplay();
+        checkSyncStatus();
+
+        // --- 2. 編輯模式邏輯 ---
+        let editingId = null;
+
+        function editRecord(id) {
+            const rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            const record = rs.find(r => r.id === id);
+            if (!record) return;
+
+            editingId = id;
+            document.getElementById('editModeBanner').classList.remove('hidden');
+            
+            let targetTab = '';
+            if (record.type === '管理費') targetTab = 'fee';
+            else if (record.type === '車位租借') targetTab = 'parking';
+            else if (record.type === '雜支') targetTab = 'misc';
+            else { alert('此類型資料無法編輯'); cancelEdit(); return; }
+            
+            switchTab(targetTab);
+
+            const form = document.getElementById(`form-${targetTab}`);
+            if(form.querySelector('[name="date"]')) form.querySelector('[name="date"]').value = record.date;
+            if(form.querySelector('[name="last3"]')) form.querySelector('[name="last3"]').value = record.last3 || '';
+
+            if (targetTab === 'fee') {
+                const parts = record.desc.match(/(.+) \((.+)\)/);
+                if (parts) {
+                    form.querySelector('[name="period"]').value = parts[1];
+                    form.querySelector('[name="unit"]').value = parts[2];
+                }
+            } else if (targetTab === 'parking') {
+                const parts = record.desc.match(/車位 (.+) \((.+)\)/);
+                if (parts) {
+                    form.querySelector('[name="unit"]').value = parts[1];
+                    form.querySelector('[name="renter"]').value = parts[2];
+                    updateParkingPrice();
+                }
+            } else if (targetTab === 'misc') {
+                form.querySelector('[name="summary"]').value = record.desc;
+                form.querySelector('[name="income"]').value = record.income || '';
+                form.querySelector('[name="expense"]').value = record.expense || '';
+            }
+
+            document.querySelectorAll('.submit-btn').forEach(btn => {
+                btn.innerHTML = '<i class="fa-solid fa-floppy-disk mr-2"></i>確認修改';
+                btn.classList.remove('bg-indigo-600', 'bg-green-600', 'bg-orange-500');
+                btn.classList.add('bg-yellow-600');
+            });
+
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('editing-mode'));
+            document.getElementById(`tab-${targetTab}`).classList.add('editing-mode');
+        }
+
+        function cancelEdit() {
+            editingId = null;
+            document.getElementById('editModeBanner').classList.add('hidden');
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('editing-mode'));
+            
+            const feeBtn = document.querySelector('#form-fee .submit-btn');
+            feeBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>提交管理費';
+            feeBtn.className = 'submit-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200';
+
+            const parkBtn = document.querySelector('#form-parking .submit-btn');
+            parkBtn.innerHTML = '<i class="fa-solid fa-car mr-2"></i>登記車位';
+            parkBtn.className = 'submit-btn w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200';
+
+            const miscBtn = document.querySelector('#form-misc .submit-btn');
+            miscBtn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜支';
+            miscBtn.className = 'submit-btn w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200';
+
+            document.querySelectorAll('form').forEach(f => {
+                f.reset();
+                if(f.querySelector('.date-input')) f.querySelector('.date-input').value = today;
+            });
+            switchTab('records');
+        }
+
+        // --- 3. 提交與儲存 ---
+        async function handleSubmit(event, type) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const data = {};
+            formData.forEach((value, key) => data[key] = value);
+
+            const newRecord = {
+                id: editingId ? editingId : uuid(),
+                timestamp: new Date().toLocaleString('zh-TW'),
+                date: data.date,
+                type: type,
+                income: 0,
+                expense: 0,
+                last3: String(data.last3 || '').trim(), // 強制轉字串並去空白
+                desc: '',
+                synced: false
+            };
+
+            if (type === '管理費') {
+                newRecord.desc = `${data.period} (${data.unit})`;
+                newRecord.income = parseInt(data.amount) || 0;
+            } else if (type === '車位租借') {
+                newRecord.desc = `車位 ${data.unit} (${data.renter})`;
+                newRecord.income = parseInt(data.amount) || 0;
+            } else if (type === '雜支') {
+                newRecord.desc = data.summary;
+                newRecord.income = parseInt(data.income) || 0;
+                newRecord.expense = parseInt(data.expense) || 0;
+            }
+
+            saveToLocal(newRecord);
+            updateTotalBalanceDisplay();
+
+            const action = editingId ? 'update' : 'create';
+            
+            if (editingId) {
+                cancelEdit();
+                syncPendingRecords(); // 背景同步
+            } else {
+                sendToSheet(newRecord, form, action);
+            }
+        }
+
+        function saveToLocal(record) {
+            let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            
+            const index = rs.findIndex(r => r.id === record.id);
+            if (index !== -1) {
+                rs[index] = record;
+            } else {
+                rs.unshift(record);
+            }
+            
+            // 排序：舊 -> 新
+            rs.sort((a, b) => {
+                const dateDiff = new Date(a.date) - new Date(b.date);
+                if(dateDiff !== 0) return dateDiff;
+                return new Date(a.timestamp) - new Date(b.timestamp);
+            });
+
+            localStorage.setItem('building_records', JSON.stringify(rs));
+            checkSyncStatus();
+        }
+
+        // --- 4. 同步與下載邏輯 ---
+
+        async function downloadFromCloud() {
+            if (!GAS_URL) {
+                openSettingsModal();
+                return;
+            }
+
+            const btn = document.getElementById('downloadBtn');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 下載中...';
+
+            try {
+                const response = await fetch(GAS_URL);
+                const cloudData = await response.json();
+
+                if (!Array.isArray(cloudData)) {
+                    throw new Error("Invalid data format");
+                }
+
+                let localRecords = JSON.parse(localStorage.getItem('building_records') || '[]');
+                const localMap = new Map(localRecords.map(r => [r.id, r]));
+                let mergedCount = 0;
+                
+                cloudData.forEach(cloudRecord => {
+                    if (localMap.has(cloudRecord.id)) {
+                        const localRecord = localMap.get(cloudRecord.id);
+                        if (localRecord.synced) {
+                            localMap.set(cloudRecord.id, cloudRecord);
+                            mergedCount++;
+                        }
+                    } else {
+                        localMap.set(cloudRecord.id, cloudRecord);
+                        mergedCount++;
+                    }
+                });
+
+                let newRecords = Array.from(localMap.values());
+                newRecords.sort((a, b) => {
+                    const dateDiff = new Date(a.date) - new Date(b.date);
+                    if(dateDiff !== 0) return dateDiff;
+                    return new Date(a.timestamp) - new Date(b.timestamp);
+                });
+
+                localStorage.setItem('building_records', JSON.stringify(newRecords));
+                
+                renderRecords();
+                updateTotalBalanceDisplay();
+                checkSyncStatus();
+                alert(`更新完成！已同步 ${mergedCount} 筆資料。`);
+
+            } catch (e) {
+                console.error(e);
+                alert('下載失敗，請檢查網路或 Apps Script 設定。');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        function checkSyncStatus() {
+            const rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            const pending = rs.filter(r => !r.synced);
+            
+            const btn = document.getElementById('headerSyncBtn');
+            const txt = document.getElementById('headerSyncText');
+            
+            if (pending.length > 0) {
+                btn.className = "flex items-center gap-2 px-3 py-1.5 rounded bg-orange-600 border border-orange-500 hover:bg-orange-500 transition text-sm text-white shadow-md animate-pulse";
+                txt.textContent = `上傳 (${pending.length})`;
+                btn.title = "點擊上傳未同步資料";
+            } else {
+                btn.className = "flex items-center gap-2 px-3 py-1.5 rounded bg-indigo-800 border border-indigo-600 hover:bg-indigo-700 transition text-sm text-gray-200";
+                txt.textContent = "已同步";
+                btn.title = "資料已最新";
+            }
+        }
+
+        function handleSyncClick() {
+            if (!GAS_URL) {
+                openSettingsModal();
+            } else {
+                syncPendingRecords();
+            }
+        }
+
+        // 重置同步狀態功能
+        function resetSyncStatus() {
+            if(!confirm("這將會把所有資料標記為「未同步」，並在下次同步時嘗試全部上傳到 Google Sheet。\n\n確定要執行嗎？")) return;
+            
+            let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            rs.forEach(r => r.synced = false);
+            localStorage.setItem('building_records', JSON.stringify(rs));
+            
+            checkSyncStatus();
+            renderRecords();
+            alert("已重置！請點擊右上角的橘色按鈕進行上傳。");
+            closeSettingsModal();
+        }
+
+        function openSettingsModal() {
+            document.getElementById('settingsModal').classList.remove('hidden');
+            document.getElementById('gasUrlInput').value = GAS_URL;
+        }
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+        function saveSettings() {
+            const url = document.getElementById('gasUrlInput').value.trim();
+            if(url) {
+                localStorage.setItem('building_gas_url', url);
+                GAS_URL = url;
+                alert('設定已儲存！');
+                closeSettingsModal();
+                checkSyncStatus();
+            } else {
+                alert('請輸入有效的網址');
+            }
+        }
+
+        async function syncPendingRecords() {
+            const rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            const pending = rs.filter(r => !r.synced);
+            
+            if (pending.length === 0) {
+                // 如果是 0，可能是假性同步，提示用戶是否要強制
+                if(confirm("目前系統顯示所有資料都已同步。\n\n如果您確定 Google Sheet 上沒有資料，請按「確定」強制重新上傳所有資料。")) {
+                    resetSyncStatus();
+                    // resetSyncStatus 會把 synced 設為 false，然後我們遞迴呼叫自己來執行上傳
+                    setTimeout(syncPendingRecords, 500); 
+                }
+                return;
+            }
+            if (!GAS_URL) {
+                openSettingsModal();
+                return;
+            }
+
+            const btn = document.getElementById('headerSyncBtn');
+            const txt = document.getElementById('headerSyncText');
+            
+            txt.textContent = "上傳中...";
+            btn.disabled = true;
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (let record of pending) {
+                try {
+                    const payloadRecord = { ...record };
+                    if (payloadRecord.last3) {
+                        payloadRecord.last3 = "'" + payloadRecord.last3; 
+                    }
+
+                    const payload = { action: 'update', ...payloadRecord };
+                    
+                    await fetch(GAS_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    record.synced = true;
+                    saveToLocal(record); 
+                    successCount++;
+                } catch (e) {
+                    console.error(e);
+                    failCount++;
+                }
+                await new Promise(r => setTimeout(r, 400));
+            }
+
+            btn.disabled = false;
+            checkSyncStatus();
+            renderRecords();
+
+            if (failCount > 0) {
+                alert(`上傳結束。成功: ${successCount}，失敗: ${failCount}。`);
+            } else {
+                // 成功後建議下載確認
+                if(confirm("上傳成功！是否要從雲端下載最新資料以確保一致性？")) {
+                    downloadFromCloud();
+                }
+            }
+        }
+
+        async function sendToSheet(record, form, action = 'create') {
+            if (!GAS_URL) return;
+
+            const btn = form ? form.querySelector('button[type="submit"]') : null;
+            if (action === 'create' && btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 傳送中';
+            }
+
+            const payloadRecord = { ...record };
+            if (payloadRecord.last3) {
+                payloadRecord.last3 = "'" + payloadRecord.last3; 
+            }
+
+            const payload = { action: action, ...payloadRecord };
+
+            try {
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                record.synced = true;
+                saveToLocal(record);
+                if(action === 'create') alert('成功傳送至 Google Sheet');
+                
+            } catch (e) {
+                console.error(e);
+                alert('傳送失敗 (已存於本地，請點擊右上角同步)');
+            } finally {
+                if (form && action === 'create' && btn) {
+                    if (form.id === 'form-fee') btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>提交管理費';
+                    else if (form.id === 'form-parking') btn.innerHTML = '<i class="fa-solid fa-car mr-2"></i>登記車位';
+                    else btn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜支';
+                    btn.disabled = false;
+                    form.reset();
+                    if(form.querySelector('.date-input')) form.querySelector('.date-input').value = today;
+                }
+                renderRecords();
+                checkSyncStatus();
+            }
+        }
+
+        // --- 5. 顯示與篩選 ---
+        let currentFilter = 'all';
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden-tab'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('bg-indigo-100', 'text-indigo-700');
+                el.classList.add('text-gray-500');
+            });
+
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden-tab');
+            const activeBtn = document.getElementById(`btn-${tabName}`);
+            activeBtn.classList.remove('text-gray-500');
+            activeBtn.classList.add('bg-indigo-100', 'text-indigo-700');
+
+            if(tabName === 'records') {
+                filterRecords('all');
+            }
+        }
+
+        function filterRecords(filterType) {
+            currentFilter = filterType;
+            
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.className = 'filter-btn px-3 py-1 text-xs rounded text-gray-500 hover:bg-gray-200';
+            });
+            const btnId = filterType === 'all' ? 'filter-all' : 
+                          filterType === '管理費' ? 'filter-fee' : 
+                          filterType === '車位租借' ? 'filter-parking' : 'filter-misc';
+            document.getElementById(btnId).className = 'filter-btn px-3 py-1 text-xs rounded bg-white shadow text-indigo-600 font-bold';
+
+            renderRecords();
+        }
+
+        function renderRecords() {
+            const tbody = document.getElementById('recordsTableBody');
+            const monthFilter = document.getElementById('monthFilter').value;
+            
+            let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            let calculatedRecords = calculateBalances(rs);
+
+            let filtered = calculatedRecords.filter(r => {
+                if (currentFilter !== 'all' && r.type !== currentFilter) return false;
+                if (monthFilter) {
+                    if (!r.date.startsWith(monthFilter)) return false;
+                }
+                return true;
+            });
+
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                document.getElementById('noDataMsg').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('noDataMsg').classList.add('hidden');
+
+            filtered.forEach(r => {
+                const tr = document.createElement('tr');
+                
+                const inc = r.income > 0 ? `<span class="text-green-600">+$${r.income}</span>` : '';
+                const exp = r.expense > 0 ? `<span class="text-red-500">-$${r.expense}</span>` : '';
+                
+                let balanceText = '-';
+                if (r.currentBalance !== undefined && !isNaN(r.currentBalance)) {
+                    balanceText = `$${r.currentBalance.toLocaleString()}`;
+                }
+
+                let badgeClass = 'bg-gray-100 text-gray-600';
+                if(r.type === '管理費') badgeClass = 'bg-indigo-100 text-indigo-800';
+                if(r.type === '車位租借') badgeClass = 'bg-green-100 text-green-800';
+
+                let actionBtn = '';
+                if (r.type !== '初始餘額') {
+                    actionBtn = `<button onclick="editRecord('${r.id}')" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-2 py-1 rounded text-xs"><i class="fa-solid fa-pen"></i> 修改</button>`;
+                }
+                
+                let syncIcon = r.synced 
+                    ? '<span class="text-green-400" title="已同步"><i class="fa-solid fa-cloud"></i></span>'
+                    : '<span class="text-orange-400" title="未同步"><i class="fa-solid fa-cloud-arrow-up"></i></span>';
+
+                const last3Display = String(r.last3 || '').replace(/^'/, '');
+
+                tr.innerHTML = `
+                    <td class="px-2 py-3 whitespace-nowrap text-gray-600">${r.date}</td>
+                    <td class="px-2 py-3">
+                        <span class="text-xs font-bold mr-1 ${badgeClass} px-1 rounded">${r.type}</span>
+                        ${r.desc}
+                    </td>
+                    <td class="px-2 py-3 text-right font-medium">${inc}</td>
+                    <td class="px-2 py-3 text-right font-medium">${exp}</td>
+                    <td class="px-2 py-3 text-right font-bold text-gray-700">${balanceText}</td>
+                    <td class="px-2 py-3 text-gray-400 text-xs">${last3Display}</td>
+                    <td class="px-2 py-3 text-center">
+                        ${syncIcon}
+                    </td>
+                    <td class="px-2 py-3 text-center">
+                        ${actionBtn}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- 6. 餘額計算核心 ---
+        function calculateBalances(recordList) {
+            let sorted = [...recordList].sort((a, b) => {
+                const dateDiff = new Date(a.date) - new Date(b.date);
+                if(dateDiff !== 0) return dateDiff;
+                return new Date(a.timestamp) - new Date(b.timestamp);
+            });
+
+            let runningBalance = 0;
+            
+            sorted = sorted.map(r => {
+                const income = parseInt(r.income) || 0;
+                const expense = parseInt(r.expense) || 0;
+
+                if (r.type === '初始餘額') {
+                    const initBal = parseInt(r.balance);
+                    runningBalance = isNaN(initBal) ? 0 : initBal;
+                } else {
+                    runningBalance = runningBalance + income - expense;
+                }
+                return { ...r, currentBalance: runningBalance };
+            });
+            return sorted;
+        }
+
+        function updateTotalBalanceDisplay() {
+            const rs = JSON.parse(localStorage.getItem('building_records') || '[]');
+            const calculated = calculateBalances(rs);
+            if (calculated.length > 0) {
+                const latest = calculated[calculated.length - 1]; 
+                const bal = latest.currentBalance;
+                document.getElementById('totalBalanceDisplay').textContent = 
+                    (bal !== undefined && !isNaN(bal)) ? `$${bal.toLocaleString()}` : '$0';
+            } else {
+                document.getElementById('totalBalanceDisplay').textContent = '$0';
+            }
+        }
+
+        // --- 7. 其他 ---
+        function updateParkingPrice() {
+            const spot = document.getElementById('parkingSpotSelect').value;
+            const priceInput = document.getElementById('parkingPrice');
+            if (spot === '11') {
+                priceInput.value = 200;
+            } else if (spot) {
+                priceInput.value = 800;
+            } else {
+                priceInput.value = '';
+            }
+        }
+
+        function toggleCalc() {
+            const calc = document.getElementById('floatingCalc');
+            const btn = document.getElementById('showCalcBtn');
+            if (calc.classList.contains('hidden')) {
+                calc.classList.remove('hidden');
+                btn.classList.add('hidden');
+            } else {
+                calc.classList.add('hidden');
+                btn.classList.remove('hidden');
+            }
+        }
+        let calcVal = '0';
+        const display = document.getElementById('calcDisplay');
+        function calcAppend(v) { if(calcVal==='0' && v!=='.') calcVal=v; else calcVal+=v; display.value = calcVal; }
+        function calcClear() { calcVal='0'; display.value='0'; }
+        function calcDelete() { calcVal = calcVal.length>1 ? calcVal.slice(0,-1) : '0'; display.value=calcVal; }
+        function calcResult() { try { calcVal = String(Function('"use strict";return ('+calcVal+')')()); display.value=calcVal; } catch{ display.value='Error'; setTimeout(calcClear,1000); } }
+        document.addEventListener('keydown', function(event) {
+            if (['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+            const calc = document.getElementById('floatingCalc');
+            if (calc.classList.contains('hidden')) return;
+            const key = event.key;
+            if (/[0-9.]/.test(key) && key.length === 1) calcAppend(key);
+            else if (['+', '-', '*', '/'].includes(key)) calcAppend(key);
+            else if (key === 'Enter' || key === '=') { event.preventDefault(); calcResult(); }
+            else if (key === 'Backspace') calcDelete();
+            else if (key === 'Escape' || key === 'Delete') calcClear();
+        });
+
+    </script>
+</body>
+</html>
