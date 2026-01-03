@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統 v6.2 (多月篩選+合併顯示)</title>
+    <title>特力屋成家財務管理系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 引入 html2canvas 用於截圖 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: "Noto Sans TC", sans-serif; background-color: #f3f4f6; padding-bottom: 120px; }
         .hidden-tab { display: none; }
@@ -41,44 +43,26 @@
         }
         
         /* === iOS Safari 專屬修復 & 樣式統一 === */
-        
-        /* 1. 修復日期輸入框：高度與內距完全對齊 text input */
         input[type="date"], input[type="month"] {
-            -webkit-appearance: none; /* 重置 iOS 預設外觀 */
-            appearance: none;
+            -webkit-appearance: none; appearance: none;
             background-color: #ffffff;
-            
-            /* 強制高度與 padding 匹配 Tailwind 的 py-2 px-3 text-base */
-            height: 42px; 
-            padding: 0.5rem 0.75rem; /* 8px 12px */
-            line-height: 1.5rem; /* 24px */
-            
-            cursor: pointer;
-            box-sizing: border-box; /* 確保 border 計算在內 */
+            height: 42px; padding: 0.5rem 0.75rem; line-height: 1.5rem;
+            cursor: pointer; box-sizing: border-box;
         }
-
-        /* 2. 修復 readonly 欄位文字變淡/半透明問題 */
         input[readonly], input[disabled] {
-            opacity: 1 !important; /* 強制不透明 */
-            -webkit-text-fill-color: #111827; /* 強制文字顏色為深黑 (Tailwind gray-900) */
-            color: #111827; 
-            background-color: #f3f4f6; /* 淺灰背景 (Tailwind gray-100) */
-        }
-        
-        /* 自訂月份下拉選單樣式 */
-        .month-checkbox-label {
-            display: flex;
-            align-items: center;
-            padding: 4px 8px;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-        .month-checkbox-label:hover {
+            opacity: 1 !important; -webkit-text-fill-color: #111827; color: #111827; 
             background-color: #f3f4f6;
         }
-        .month-checkbox {
-            margin-right: 8px;
+        #monthFilter {
+            min-height: 30px !important; height: 30px !important; 
+            padding: 0 4px !important; background-color: transparent !important;
         }
+        .month-checkbox-label { display: flex; align-items: center; padding: 4px 8px; cursor: pointer; border-radius: 4px; }
+        .month-checkbox-label:hover { background-color: #f3f4f6; }
+        .month-checkbox { margin-right: 8px; }
+        
+        /* 截圖時隱藏的元素 class */
+        .hide-on-screenshot { display: none !important; }
     </style>
 </head>
 <body>
@@ -98,7 +82,7 @@
         </div>
     </header>
 
-    <main class="max-w-3xl mx-auto p-4 space-y-6">
+    <main class="max-w-3xl mx-auto p-4 space-y-6" id="mainContent">
         <div class="balance-card bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-5 rounded-xl shadow-lg flex justify-between items-center">
             <div>
                 <p class="text-indigo-100 text-sm font-medium mb-1">大樓零用金餘額</p>
@@ -200,7 +184,7 @@
             </form>
         </div>
 
-        <!-- 雜項 (原雜支) -->
+        <!-- 雜項 -->
         <div id="tab-misc" class="tab-content hidden-tab bg-white p-6 rounded-lg shadow-md">
             <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">雜項紀錄</h2>
             <form onsubmit="handleSubmit(event, '雜項')" id="form-misc" class="space-y-4">
@@ -230,7 +214,7 @@
 
         <div id="tab-records" class="tab-content hidden-tab bg-white p-4 rounded-lg shadow-md">
             <!-- 搜尋與篩選區 -->
-            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-4 gap-4">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-4 gap-4 screenshot-hide">
                 <h2 class="text-lg font-bold text-gray-800 w-full md:w-auto whitespace-nowrap">流水明細</h2>
                 
                 <div class="flex flex-col gap-3 w-full md:flex-row md:items-center md:w-auto">
@@ -243,20 +227,16 @@
                     </div>
 
                     <div class="flex items-center justify-between gap-2 w-full md:w-auto">
-                        <!-- 月份多選篩選器 (取代原本的 type=month) -->
+                        <!-- 月份多選篩選器 -->
                         <div class="relative">
                             <button onclick="toggleMonthDropdown()" class="flex items-center bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm text-sm text-gray-700 whitespace-nowrap h-[30px] hover:bg-gray-50">
                                 <i class="fa-solid fa-calendar-days text-gray-500 mr-2"></i>
                                 <span id="monthFilterLabel">篩選月份 (全)</span>
                                 <i class="fa-solid fa-caret-down ml-2 text-gray-400"></i>
                             </button>
-                            <!-- 下拉選單內容 -->
                             <div id="monthDropdownContent" class="hidden absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50 p-2 max-h-60 overflow-y-auto">
-                                <div id="monthCheckboxes" class="flex flex-col gap-1">
-                                    <!-- JS 動態生成選項 -->
-                                </div>
+                                <div id="monthCheckboxes" class="flex flex-col gap-1"></div>
                             </div>
-                            <!-- 點擊外部關閉遮罩 -->
                             <div id="monthDropdownOverlay" onclick="toggleMonthDropdown()" class="hidden fixed inset-0 z-40 bg-transparent"></div>
                         </div>
 
@@ -271,19 +251,19 @@
                 </div>
             </div>
             
-            <!-- 電腦版表格 (md以上顯示) -->
+            <!-- 電腦版表格 -->
             <div class="hidden md:block overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-2 py-2 text-left">日期</th><th class="px-2 py-2 text-left">摘要</th><th class="px-2 py-2 text-right">收入</th><th class="px-2 py-2 text-right">支出</th><th class="px-2 py-2 text-right">結餘</th><th class="px-2 py-2 text-left">後三碼</th><th class="px-2 py-2 text-center">狀態</th><th class="px-2 py-2 text-center">操作</th>
+                            <th class="px-2 py-2 text-left">日期</th><th class="px-2 py-2 text-left">摘要</th><th class="px-2 py-2 text-right">收入</th><th class="px-2 py-2 text-right">支出</th><th class="px-2 py-2 text-right">結餘</th><th class="px-2 py-2 text-left">後三碼</th><th class="px-2 py-2 text-center screenshot-hide">狀態</th><th class="px-2 py-2 text-center screenshot-hide">操作</th>
                         </tr>
                     </thead>
                     <tbody id="recordsTableBody" class="bg-white divide-y divide-gray-200"></tbody>
                 </table>
             </div>
 
-            <!-- 手機版卡片清單 (md以下顯示) -->
+            <!-- 手機版卡片清單 -->
             <div id="mobileRecordsList" class="md:hidden space-y-3">
                 <!-- 卡片將由 JS 生成 -->
             </div>
@@ -301,15 +281,12 @@
             <button onclick="importFiveFees()" class="w-full mb-3 px-3 py-2 text-xs bg-indigo-100 text-indigo-700 rounded border border-indigo-300 font-bold hover:bg-indigo-200">
                 <i class="fa-solid fa-file-import"></i> 📥 快速匯入 5 筆管理費 (2-2, 3-1, 3-2...)
             </button>
-
             <button onclick="cleanDuplicates()" class="w-full mb-3 px-3 py-2 text-xs bg-green-100 text-green-700 rounded border border-green-300 font-bold hover:bg-green-200">
                 <i class="fa-solid fa-broom"></i> 清除重複資料
             </button>
-
             <button onclick="deleteUnsyncedRecords()" class="w-full mb-3 px-3 py-2 text-xs bg-red-100 text-red-700 rounded border border-red-300 font-bold hover:bg-red-200">
                 <i class="fa-solid fa-trash-can"></i> 刪除未同步資料 (捨棄本機修改)
             </button>
-
             <button onclick="forceDownload()" class="w-full mb-3 px-3 py-2 text-xs bg-blue-100 text-blue-700 rounded border border-blue-300 font-bold hover:bg-blue-200">
                 <i class="fa-solid fa-cloud-arrow-down"></i> 強制從雲端抓回資料 (救援)
             </button>
@@ -321,6 +298,17 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- 浮動按鈕區 -->
+    <div class="fixed bottom-5 right-5 flex flex-col gap-2 z-50">
+        <!-- 截圖按鈕 -->
+        <button onclick="takeScreenshot()" class="w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition" title="一鍵截圖">
+            <i class="fa-solid fa-camera"></i>
+        </button>
+
+        <!-- 計算機開關 -->
+        <button onclick="toggleCalc()" id="showCalcBtn" class="w-12 h-12 bg-gray-800 text-white rounded-full shadow-lg flex items-center justify-center"><i class="fa-solid fa-calculator"></i></button>
     </div>
 
     <div id="floatingCalc" class="floating-calc hidden">
@@ -347,7 +335,6 @@
             <button onclick="calcResult()" class="calc-btn bg-blue-600 rounded text-white">=</button>
         </div>
     </div>
-    <button onclick="toggleCalc()" id="showCalcBtn" class="fixed bottom-5 right-5 w-12 h-12 bg-gray-800 text-white rounded-full shadow-lg flex items-center justify-center z-50"><i class="fa-solid fa-calculator"></i></button>
 
     <script>
         const today = new Date().toISOString().split('T')[0];
@@ -359,23 +346,17 @@
         if (!GAS_URL) { GAS_URL = DEFAULT_URL; localStorage.setItem('building_gas_url', GAS_URL); }
 
         let currentFilter = 'all';
-        let selectedMonths = new Set(); // 儲存使用者勾選的月份 (格式：YYYY-MM)
+        let selectedMonths = new Set(); 
 
         let records = JSON.parse(localStorage.getItem('building_records') || '[]');
         
-        // --- 舊資料自動遷移：雜支 -> 雜項 ---
         let migrated = false;
         records.forEach(r => {
-            if (r.type === '雜支') {
-                r.type = '雜項';
-                migrated = true;
-            }
+            if (r.type === '雜支') { r.type = '雜項'; migrated = true; }
         });
-        // --- 強制清除舊的預設資料 ---
         const initialLen = records.length;
         records = records.filter(r => {
             if (r.id === 'fixed-init-balance-2025' || r.id === 'fixed-sample-parking') return false;
-            // 避免舊範例重複
             if (r.type === '初始餘額' && r.desc === '上年度餘額' && r.balance == 378129) return false;
             if (r.type === '車位租借' && r.desc && r.desc.includes('車位 31 (2-2)')) return false;
             return true;
@@ -384,16 +365,52 @@
         if (migrated || records.length !== initialLen) {
             localStorage.setItem('building_records', JSON.stringify(records));
         }
-        // ------------------------------
 
         updateTotalBalanceDisplay();
-        initMonthFilter(); // 初始化月份選項
+        initMonthFilter(); 
         renderRecords();
         if (GAS_URL) downloadFromCloud(true); 
 
         document.addEventListener("visibilitychange", function() {
             if (!document.hidden && GAS_URL) downloadFromCloud(true);
         });
+
+        // --- Screenshot Function ---
+        function takeScreenshot() {
+            // 自動切換到流水明細 Tab 確保內容可見
+            switchTab('records');
+            
+            // 暫時隱藏不必要的元素 (搜尋列、標題按鈕等)
+            // 但保留表格內容。
+            // 使用 class 'screenshot-hide' 來控制欄位 (已在 CSS 定義)
+            
+            // 對手機版卡片，隱藏操作按鈕區
+            document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.add('hide-on-screenshot'));
+
+            const target = document.getElementById('tab-records');
+            
+            html2canvas(target, {
+                scale: 2, // 提高解析度
+                backgroundColor: '#ffffff',
+                ignoreElements: (element) => {
+                    // 忽略截圖時不需要的元素
+                    return element.classList.contains('screenshot-hide') || element.id === 'noDataMsg';
+                }
+            }).then(canvas => {
+                // 還原隱藏
+                document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.remove('hide-on-screenshot'));
+
+                // 下載圖片
+                const link = document.createElement('a');
+                link.download = `財務明細_${new Date().toISOString().slice(0,10)}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+            }).catch(err => {
+                console.error(err);
+                alert('截圖失敗，請重試');
+                document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.remove('hide-on-screenshot'));
+            });
+        }
 
         // --- Core Functions ---
         async function downloadFromCloud(silent = false) {
@@ -415,7 +432,6 @@
                 let updateCount = 0;
                 
                 cloudData.forEach(cloudRecord => {
-                    // 下載時也做遷移檢查
                     if (cloudRecord.type === '雜支') cloudRecord.type = '雜項';
 
                     if (localMap.has(cloudRecord.id)) {
@@ -431,12 +447,10 @@
                 });
 
                 let newRecords = Array.from(localMap.values());
-                // 雲端下載時也要重算一次餘額，確保顯示正確
                 newRecords = calculateBalancesForList(newRecords);
 
                 localStorage.setItem('building_records', JSON.stringify(newRecords));
                 
-                // 更新月份選項，確保新下載的資料月份也能被篩選
                 initMonthFilter();
                 renderRecords(); 
                 updateTotalBalanceDisplay(); 
@@ -449,9 +463,7 @@
             } finally { checkSyncStatus(); }
         }
 
-        // 獨立出計算邏輯供多處使用
         function calculateBalancesForList(list) {
-            // 排序：舊 -> 新
             list.sort((a, b) => {
                 const d = new Date(a.date) - new Date(b.date);
                 return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
@@ -468,15 +480,13 @@
                     runningBal = runningBal + inc - exp;
                     r.balance = runningBal; 
                 }
-                return { ...r, currentBalance: runningBal }; // currentBalance 用於顯示
+                return { ...r, currentBalance: runningBal }; 
             });
         }
 
-        // 修改過的發送函數：保證 UI 更新
         async function sendToSheet(record, form, action = 'create') {
             const btn = form ? form.querySelector('button[type="submit"]') : null;
             
-            // 內部 UI 重置函數
             const resetUI = () => {
                 if (form && action === 'create') {
                     if (form.id === 'form-fee') btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>提交管理費';
@@ -486,12 +496,10 @@
                     form.reset();
                     if(form.querySelector('.date-input')) form.querySelector('.date-input').value = today;
                 }
-                // 更新月份選項 (如果有新月份產生)
                 initMonthFilter();
                 renderRecords(); checkSyncStatus();
             };
 
-            // 本地模式或無網址時，直接結束 (handleSubmit 已處理本地儲存)
             if (!GAS_URL) {
                 resetUI();
                 return;
@@ -508,7 +516,6 @@
             try {
                 await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 
-                // 成功後更新本地狀態
                 let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
                 const idx = rs.findIndex(r => r.id === record.id);
                 if (idx !== -1) {
@@ -561,7 +568,6 @@
             downloadFromCloud(false);
         }
 
-        // 2. 編輯模式邏輯
         let editingId = null; 
 
         async function handleSubmit(event, type) {
@@ -574,65 +580,51 @@
                 date: data.date, type: type,
                 income: 0, expense: 0,
                 last3: String(data.last3 || '').trim(), desc: '', synced: false,
-                balance: 0 // 先預設
+                balance: 0 
             };
             
             if (type === '管理費') { newRecord.desc = `${data.period} (${data.unit})`; newRecord.income = parseInt(data.amount) || 0; }
             else if (type === '車位租借') { newRecord.desc = `車位 ${data.unit} (${data.renter})`; newRecord.income = parseInt(data.amount) || 0; }
             else { newRecord.desc = data.summary; newRecord.income = parseInt(data.income)||0; newRecord.expense = parseInt(data.expense)||0; }
 
-            // 1. 取得現有資料
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
-            
-            // 2. 加入新資料 (或更新)
             const idx = rs.findIndex(r => r.id === newRecord.id);
             if (idx !== -1) { rs[idx] = newRecord; } else { rs.push(newRecord); }
 
-            // 3. 重新計算所有餘額，並更新到每一筆資料的 balance 欄位
             rs = calculateBalancesForList(rs);
 
-            // 4. 取得該筆新資料的正確餘額 (用於發送)
             const updatedRecord = rs.find(r => r.id === newRecord.id);
             if(updatedRecord) {
-                newRecord.balance = updatedRecord.currentBalance; // 確保發送時有餘額
+                newRecord.balance = updatedRecord.currentBalance; 
             }
 
-            // 5. 儲存
             localStorage.setItem('building_records', JSON.stringify(rs));
             updateTotalBalanceDisplay();
             
-            // 6. 立即更新畫面 (重要！解決按鈕沒反應的感覺)
-            initMonthFilter(); // 重新生成月份選項
+            initMonthFilter(); 
             renderRecords();
 
             if(editingId) { cancelEdit(); syncPendingRecords(); }
             else { sendToSheet(newRecord, form, 'create'); }
         }
 
-        // --- Multi-Month Filter Logic ---
-
         function initMonthFilter() {
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
-            // 找出所有不重複的月份
             let monthSet = new Set();
             rs.forEach(r => {
                 if (r.date) {
-                    let m = r.date.substring(0, 7); // "YYYY-MM"
-                    // 如果是 2025 的資料，統一視為 2026-01 (用於篩選邏輯顯示)
+                    let m = r.date.substring(0, 7); 
                     if (m.startsWith('2025')) {
                         m = '2026-01';
                     }
                     monthSet.add(m);
                 }
             });
-            // 排序 (新到舊)
             let sortedMonths = Array.from(monthSet).sort().reverse();
             
-            // 生成 HTML
             const container = document.getElementById('monthCheckboxes');
             container.innerHTML = '';
             
-            // "全部" 選項
             const allDiv = document.createElement('div');
             allDiv.className = 'month-checkbox-label hover:bg-gray-50 p-1 rounded cursor-pointer';
             allDiv.innerHTML = `<label class="flex items-center w-full cursor-pointer"><input type="checkbox" value="all" class="month-checkbox mr-2" onchange="handleMonthChange(this)" ${selectedMonths.size === 0 ? 'checked' : ''}> <span class="text-sm">全部顯示</span></label>`;
@@ -642,7 +634,7 @@
                 const div = document.createElement('div');
                 div.className = 'month-checkbox-label hover:bg-gray-50 p-1 rounded cursor-pointer';
                 let labelText = m;
-                if (m === '2026-01') labelText = '2026-01 (含2025)'; // 特殊標示
+                if (m === '2026-01') labelText = '2026-01 (含2025)'; 
                 
                 div.innerHTML = `<label class="flex items-center w-full cursor-pointer"><input type="checkbox" value="${m}" class="month-checkbox mr-2" onchange="handleMonthChange(this)" ${selectedMonths.has(m) ? 'checked' : ''}> <span class="text-sm">${labelText}</span></label>`;
                 container.appendChild(div);
@@ -667,7 +659,6 @@
             if (checkbox.value === 'all') {
                 if (checkbox.checked) {
                     selectedMonths.clear();
-                    // 取消其他勾選
                     document.querySelectorAll('.month-checkbox').forEach(cb => {
                         if (cb.value !== 'all') cb.checked = false;
                     });
@@ -675,7 +666,6 @@
             } else {
                 if (checkbox.checked) {
                     selectedMonths.add(checkbox.value);
-                    // 取消 "全部"
                     const allCb = document.querySelector('.month-checkbox[value="all"]');
                     if (allCb) allCb.checked = false;
                 } else {
@@ -683,7 +673,6 @@
                 }
             }
             
-            // 如果都沒選，預設回全部
             if (selectedMonths.size === 0) {
                  const allCb = document.querySelector('.month-checkbox[value="all"]');
                  if (allCb) allCb.checked = true;
@@ -702,8 +691,6 @@
             }
         }
 
-
-        // --- UI Rendering (Updated for Multi-Month) ---
         function renderRecords() {
             const tbody = document.getElementById('recordsTableBody');
             const mobileList = document.getElementById('mobileRecordsList');
@@ -711,23 +698,18 @@
 
             let list = calculateBalancesForList(JSON.parse(localStorage.getItem('building_records') || '[]'));
             
-            // Filter logic
             let filtered = list.filter(r => {
-                // 強制轉字串避免 .includes 錯誤
                 const descStr = String(r.desc || '');
                 if (descStr.includes('(已刪除)')) return false;
                 if (currentFilter!=='all' && r.type!==currentFilter) return false;
                 
-                // --- 月份篩選邏輯 ---
                 if (selectedMonths.size > 0) {
                     let rMonth = r.date.substring(0, 7);
-                    // 2025 資料合併邏輯
                     if (r.date.startsWith('2025')) {
                         rMonth = '2026-01';
                     }
                     if (!selectedMonths.has(rMonth)) return false;
                 }
-                // -------------------
 
                 if (searchKeyword) {
                     const matchDesc = descStr.toLowerCase().includes(searchKeyword);
@@ -737,12 +719,6 @@
                 }
                 return true;
             });
-            
-            // Display: Keep calculated order (Old -> New) or reverse for UI?
-            // Usually UI shows Newest First for logs. But accounting balance implies running total.
-            // Current calculateBalances sorts Old->New. 
-            // If we reverse, the balance column might look confusing if reading top-down.
-            // Let's keep Old->New for logical flow of balance accumulation.
             
             tbody.innerHTML = '';
             mobileList.innerHTML = '';
@@ -767,7 +743,6 @@
                     `;
                 }
 
-                // 1. Desktop Table Row
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-50";
                 tr.innerHTML = `<td class="px-2 py-3 text-gray-600 whitespace-nowrap">${r.date}</td>
@@ -776,11 +751,10 @@
                     <td class="px-2 py-3 text-right font-medium">${exp}</td>
                     <td class="px-2 py-3 text-right font-bold text-gray-700">${bal}</td>
                     <td class="px-2 py-3 text-xs text-gray-500">${l3}</td>
-                    <td class="px-2 py-3 text-center">${icon}</td>
-                    <td class="px-2 py-3 text-center whitespace-nowrap">${action}</td>`;
+                    <td class="px-2 py-3 text-center screenshot-hide">${icon}</td>
+                    <td class="px-2 py-3 text-center whitespace-nowrap screenshot-hide">${action}</td>`;
                 tbody.appendChild(tr);
 
-                // 2. Mobile Card
                 const card = document.createElement('div');
                 card.className = "bg-white p-4 rounded-lg shadow border-l-4 " + (r.type==='管理費'?'border-blue-500':(r.type==='車位租借'?'border-green-500':'border-orange-500'));
                 card.innerHTML = `
@@ -801,7 +775,7 @@
                             <div class="font-bold text-gray-700">${bal}</div>
                         </div>
                     </div>
-                    <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+                    <div class="flex justify-between items-center pt-2 border-t border-gray-100 mobile-action-area">
                         <div class="text-xs text-gray-400">後三碼: ${l3 || '-'}</div>
                         <div class="flex items-center gap-3">
                             <div class="text-sm">${icon}</div>
@@ -813,10 +787,8 @@
             });
         }
 
-        // 新增刪除功能
         function deleteRecord(id) {
             if(!confirm('確定要刪除這筆資料嗎？\n(這將會把金額歸零並標記為已刪除，然後同步到雲端)')) return;
-            
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             const index = rs.findIndex(r => r.id === id);
             if(index !== -1) {
@@ -825,16 +797,12 @@
                 record.income = 0; record.expense = 0;
                 record.synced = false; 
                 rs[index] = record;
-                
-                // 刪除後也要重算餘額
                 rs = calculateBalancesForList(rs);
-                
                 localStorage.setItem('building_records', JSON.stringify(rs));
                 syncPendingRecords(); renderRecords(); updateTotalBalanceDisplay();
             }
         }
 
-        // 清除重複資料功能
         function cleanDuplicates() {
             if(!confirm("這將會移除內容完全相同(日期/類型/描述/金額)的重複資料，只保留一筆。\n\n確定執行？")) return;
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
@@ -853,11 +821,10 @@
                 newRecords = calculateBalancesForList(newRecords);
                 localStorage.setItem('building_records', JSON.stringify(newRecords));
                 renderRecords(); updateTotalBalanceDisplay(); alert(`已移除 ${removedCount} 筆重複資料！`); closeSettingsModal();
-                initMonthFilter(); // 重整月份清單
+                initMonthFilter(); 
             } else alert("未發現重複資料。");
         }
 
-        // 新增：刪除未同步資料
         function deleteUnsyncedRecords() {
             if(!confirm("確定要刪除所有「未同步」的資料嗎？\n這將會遺失尚未上傳到雲端的本機新增/修改紀錄。\n\n此動作無法復原！")) return;
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
@@ -868,18 +835,11 @@
             localStorage.setItem('building_records', JSON.stringify(newRs));
             renderRecords(); updateTotalBalanceDisplay(); checkSyncStatus();
             alert(`已刪除 ${deletedCount} 筆未同步的資料。`); closeSettingsModal();
-            initMonthFilter(); // 重整月份清單
+            initMonthFilter(); 
         }
 
-        // 快速匯入5筆管理費功能 (指定資料)
         function importFiveFees() {
             if(!confirm("確定要匯入指定的 5 筆管理費資料嗎？")) return;
-            // 2-2 1/2 081 -> 2026-01-02
-            // 3-1 12/31 252 -> 2025-12-31
-            // 3-2 1/2 722 -> 2026-01-02
-            // 4-2 12/31 252 -> 2025-12-31
-            // 5-2 1/2 370 -> 2026-01-02
-            
             const newFees = [
                 { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (2-2)', income: 4800, expense: 0, last3: '081', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
                 { id: uuid(), type: '管理費', date: '2025-12-31', desc: '115-上 (3-1)', income: 4800, expense: 0, last3: '252', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
@@ -887,22 +847,17 @@
                 { id: uuid(), type: '管理費', date: '2025-12-31', desc: '115-上 (4-2)', income: 4800, expense: 0, last3: '252', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 },
                 { id: uuid(), type: '管理費', date: '2026-01-02', desc: '115-上 (5-2)', income: 4800, expense: 0, last3: '370', timestamp: new Date().toLocaleString('zh-TW'), synced: false, balance: 0 }
             ];
-            
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             rs.push(...newFees);
-            
-            // Recalculate balances
             rs = calculateBalancesForList(rs);
-            
             localStorage.setItem('building_records', JSON.stringify(rs));
             renderRecords();
             updateTotalBalanceDisplay();
             checkSyncStatus();
-            
             alert("已匯入 5 筆資料！系統將自動嘗試同步。");
             closeSettingsModal();
             syncPendingRecords();
-            initMonthFilter(); // 更新月份選項
+            initMonthFilter(); 
         }
 
         function updateTotalBalanceDisplay() {
@@ -916,7 +871,6 @@
             }
         }
 
-        // Other UI
         function filterRecords(t) { currentFilter=t; document.querySelectorAll('.filter-btn').forEach(b=>b.className='filter-btn px-3 py-1 text-xs rounded text-gray-500 hover:bg-gray-200'); if(document.getElementById('filter-'+(t==='all'?'all':(t==='管理費'?'fee':(t==='車位租借'?'parking':'misc'))))) document.getElementById('filter-'+(t==='all'?'all':(t==='管理費'?'fee':(t==='車位租借'?'parking':'misc')))).className='filter-btn px-3 py-1 text-xs rounded bg-white shadow text-indigo-600 font-bold'; renderRecords(); }
         function editRecord(id) {
             const r = JSON.parse(localStorage.getItem('building_records')).find(x=>x.id===id);
