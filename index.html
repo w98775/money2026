@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統 v5.6 (手機優化+搜尋版)</title>
+    <title>大樓財務管理系統 v5.7 (iOS金額顯示修復版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -45,6 +45,13 @@
             background-color: #ffffff;
             min-height: 42px; 
             cursor: pointer; 
+        }
+        
+        /* --- 新增：修復 iOS 上 readonly 欄位 (金額) 文字變淡/異常的問題 --- */
+        input[readonly], input[disabled] {
+            opacity: 1; /* 強制不透明 */
+            -webkit-text-fill-color: currentColor; /* 強制使用設定的文字顏色 */
+            color: #111827; /* Tailwind gray-900 */
         }
         
         #monthFilter {
@@ -119,7 +126,8 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">金額</label>
-                        <input type="number" name="amount" value="4800" readonly class="block w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-base cursor-not-allowed">
+                        <!-- 修正：加入 text-gray-900 並依賴全域 CSS 修復 iOS readonly 顯示 -->
+                        <input type="number" name="amount" value="4800" readonly class="block w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-base text-gray-900 cursor-not-allowed">
                     </div>
                 </div>
                 <div>
@@ -160,7 +168,8 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">金額</label>
-                        <input type="number" name="amount" id="parkingPrice" readonly class="block w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-base cursor-not-allowed">
+                        <!-- 修正：加入 text-gray-900 並依賴全域 CSS 修復 iOS readonly 顯示 -->
+                        <input type="number" name="amount" id="parkingPrice" readonly class="block w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-base text-gray-900 cursor-not-allowed">
                     </div>
                 </div>
                 <div>
@@ -328,6 +337,7 @@
         const initialLen = records.length;
         records = records.filter(r => {
             if (r.id === 'fixed-init-balance-2025' || r.id === 'fixed-sample-parking') return false;
+            // 避免舊範例重複
             if (r.type === '初始餘額' && r.desc === '上年度餘額' && r.balance == 378129) return false;
             if (r.type === '車位租借' && r.desc && r.desc.includes('車位 31 (2-2)')) return false;
             return true;
