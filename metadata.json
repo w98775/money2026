@@ -1,4 +1,5 @@
 {
   "name": "Building Finance Manager v3.6",
-  "description": "A comprehensive building financial management system for tracking management fees, parking rentals, and miscellaneous expenses with Google Sheets synchronization."
+  "description": "A comprehensive building financial management system for tracking management fees, parking rentals, and miscellaneous expenses with Google Sheets synchronization.",
+  "requestFramePermissions": []
 }
