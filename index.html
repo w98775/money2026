@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統 v5.5 (iOS修復版)</title>
+    <title>大樓財務管理系統 v5.6 (手機優化+搜尋版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -40,17 +40,15 @@
             width: 90%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
         }
         
-        /* 修復 iOS 日期輸入框問題：移除 appearance: none 以恢復原生點擊行為 */
+        /* 修復 iOS 日期輸入框問題 */
         input[type="date"], input[type="month"] {
-            /* -webkit-appearance: none;  <-- 移除此行，這是導致 iOS 無反應的主因 */
             background-color: #ffffff;
-            min-height: 42px; /* 確保有足夠的點擊高度 */
-            cursor: pointer; /* 提示可點擊 */
+            min-height: 42px; 
+            cursor: pointer; 
         }
         
-        /* 針對篩選器的 input 做特殊調整 */
         #monthFilter {
-            min-height: 30px !important; /* 篩選器不需要太高 */
+            min-height: 30px !important; 
             padding: 0 4px;
             background-color: transparent;
         }
@@ -204,26 +202,39 @@
         </div>
 
         <div id="tab-records" class="tab-content hidden-tab bg-white p-4 rounded-lg shadow-md">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-2 gap-2">
-                <h2 class="text-lg font-bold text-gray-800">流水明細</h2>
+            <!-- 搜尋與篩選區 -->
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-4 gap-4">
+                <h2 class="text-lg font-bold text-gray-800 w-full md:w-auto">流水明細</h2>
                 
-                <div class="flex flex-wrap items-center gap-2 justify-end w-full md:w-auto">
-                    <!-- 改良後的日期篩選器 -->
-                    <div class="flex items-center bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm">
-                        <i class="fa-solid fa-calendar-days text-gray-500 mr-2"></i>
-                        <span class="text-sm text-gray-500 whitespace-nowrap">日期:</span>
-                        <input type="month" id="monthFilter" onchange="renderRecords()" class="text-sm text-gray-700 bg-transparent border-none focus:ring-0 p-0 ml-1 w-28 outline-none">
+                <div class="flex flex-col gap-3 w-full md:flex-row md:items-center md:w-auto">
+                    <!-- 搜尋框 (新增) -->
+                    <div class="relative w-full md:w-48">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400">
+                            <i class="fa-solid fa-search"></i>
+                        </span>
+                        <input type="text" id="searchInput" oninput="renderRecords()" placeholder="搜尋摘要/後三碼..." class="w-full border border-gray-300 rounded-md py-1.5 pl-8 pr-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
 
-                    <div class="flex space-x-1 bg-gray-100 p-1 rounded">
-                        <button onclick="filterRecords('all')" id="filter-all" class="filter-btn px-3 py-1 text-xs font-bold rounded bg-white shadow text-indigo-600">全部</button>
-                        <button onclick="filterRecords('管理費')" id="filter-fee" class="filter-btn px-3 py-1 text-xs rounded text-gray-500">管理費</button>
-                        <button onclick="filterRecords('車位租借')" id="filter-parking" class="filter-btn px-3 py-1 text-xs rounded text-gray-500">車位</button>
-                        <button onclick="filterRecords('雜支')" id="filter-misc" class="filter-btn px-3 py-1 text-xs rounded text-gray-500">雜支</button>
+                    <div class="flex items-center justify-between gap-2 w-full md:w-auto">
+                        <!-- 日期篩選 -->
+                        <div class="flex items-center bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm flex-1 md:flex-none">
+                            <i class="fa-solid fa-calendar-days text-gray-500 mr-2"></i>
+                            <input type="month" id="monthFilter" onchange="renderRecords()" class="text-sm text-gray-700 bg-transparent border-none focus:ring-0 p-0 w-full outline-none">
+                        </div>
+
+                        <!-- 類別篩選 -->
+                        <div class="flex space-x-1 bg-gray-100 p-1 rounded overflow-x-auto max-w-[200px] md:max-w-none">
+                            <button onclick="filterRecords('all')" id="filter-all" class="filter-btn px-3 py-1 text-xs font-bold rounded bg-white shadow text-indigo-600 whitespace-nowrap">全部</button>
+                            <button onclick="filterRecords('管理費')" id="filter-fee" class="filter-btn px-3 py-1 text-xs rounded text-gray-500 whitespace-nowrap">管理費</button>
+                            <button onclick="filterRecords('車位租借')" id="filter-parking" class="filter-btn px-3 py-1 text-xs rounded text-gray-500 whitespace-nowrap">車位</button>
+                            <button onclick="filterRecords('雜支')" id="filter-misc" class="filter-btn px-3 py-1 text-xs rounded text-gray-500 whitespace-nowrap">雜支</button>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="overflow-x-auto">
+            
+            <!-- 電腦版表格 (md以上顯示) -->
+            <div class="hidden md:block overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 text-sm">
                     <thead class="bg-gray-50">
                         <tr>
@@ -233,6 +244,12 @@
                     <tbody id="recordsTableBody" class="bg-white divide-y divide-gray-200"></tbody>
                 </table>
             </div>
+
+            <!-- 手機版卡片清單 (md以下顯示) -->
+            <div id="mobileRecordsList" class="md:hidden space-y-3">
+                <!-- 卡片將由 JS 生成 -->
+            </div>
+
             <div id="noDataMsg" class="text-center text-gray-400 py-8 hidden">無符合資料</div>
         </div>
     </main>
@@ -311,7 +328,6 @@
         const initialLen = records.length;
         records = records.filter(r => {
             if (r.id === 'fixed-init-balance-2025' || r.id === 'fixed-sample-parking') return false;
-            // 避免舊範例重複
             if (r.type === '初始餘額' && r.desc === '上年度餘額' && r.balance == 378129) return false;
             if (r.type === '車位租借' && r.desc && r.desc.includes('車位 31 (2-2)')) return false;
             return true;
@@ -533,32 +549,52 @@
             else { sendToSheet(newRecord, form, 'create'); }
         }
 
-        // --- UI Rendering ---
+        // --- UI Rendering (Updated for Search & Mobile Cards) ---
         function renderRecords() {
             const tbody = document.getElementById('recordsTableBody');
+            const mobileList = document.getElementById('mobileRecordsList');
             const month = document.getElementById('monthFilter').value;
+            const searchKeyword = document.getElementById('searchInput').value.toLowerCase().trim();
+
             // 讀取時再次確保計算 (雖然 save 時已算過，但確保顯示一致)
             let list = calculateBalancesForList(JSON.parse(localStorage.getItem('building_records') || '[]'));
             
+            // Filter logic
             let filtered = list.filter(r => {
                 if (r.desc && r.desc.includes('(已刪除)')) return false;
                 if (currentFilter!=='all' && r.type!==currentFilter) return false;
                 if (month && !r.date.startsWith(month)) return false;
+                if (searchKeyword) {
+                    const matchDesc = r.desc.toLowerCase().includes(searchKeyword);
+                    const matchType = r.type.toLowerCase().includes(searchKeyword);
+                    const matchLast3 = (r.last3 || '').includes(searchKeyword);
+                    if (!matchDesc && !matchType && !matchLast3) return false;
+                }
                 return true;
             });
             
+            // Reverse for display (Newest first) is usually preferred in UI, 
+            // but the requirement "上傳資料確保以最舊道最新排列" suggests we might want to display sorted by date.
+            // Let's keep display sorted by Date (Oldest to Newest) as per calculation logic, 
+            // OR reverse it for "Latest on top" for better UX? 
+            // Usually accounting shows latest at bottom if it's a running balance, or latest top.
+            // Let's stick to the calculation order (Old -> New) which is consistent with the balance column running down.
+            // However, mobile users might want to see latest at the bottom?
+            // Actually, `calculateBalancesForList` sorts Old->New. We'll display in that order.
+            
             tbody.innerHTML = '';
+            mobileList.innerHTML = '';
             document.getElementById('noDataMsg').classList.toggle('hidden', filtered.length > 0);
             
             filtered.forEach(r => {
-                const tr = document.createElement('tr');
                 const inc = r.income>0 ? `<span class="text-green-600">+$${r.income}</span>` : '';
                 const exp = r.expense>0 ? `<span class="text-red-500">-$${r.expense}</span>` : '';
                 const bal = `$${(r.currentBalance||0).toLocaleString()}`;
                 const l3 = (r.last3||'').replace(/^'/,'');
-                let badge = 'bg-gray-100';
-                if(r.type==='管理費') badge='bg-indigo-100 text-indigo-800';
+                let badge = 'bg-gray-100 text-gray-600';
+                if(r.type==='管理費') badge='bg-blue-100 text-blue-800';
                 if(r.type==='車位租借') badge='bg-green-100 text-green-800';
+                if(r.type==='雜支') badge='bg-orange-100 text-orange-800';
                 
                 let icon = r.synced ? '<span class="text-green-500"><i class="fa-solid fa-check"></i></span>' : '<span class="text-orange-500"><i class="fa-solid fa-arrow-up"></i></span>';
                 let action = '';
@@ -569,8 +605,49 @@
                     `;
                 }
 
-                tr.innerHTML = `<td class="px-2 py-3 text-gray-600">${r.date}</td><td class="px-2 py-3"><span class="text-xs font-bold mr-1 ${badge} px-1 rounded">${r.type}</span>${r.desc}</td><td class="px-2 py-3 text-right font-medium">${inc}</td><td class="px-2 py-3 text-right font-medium">${exp}</td><td class="px-2 py-3 text-right font-bold text-gray-700">${bal}</td><td class="px-2 py-3 text-xs">${l3}</td><td class="px-2 py-3 text-center">${icon}</td><td class="px-2 py-3 text-center whitespace-nowrap">${action}</td>`;
+                // 1. Desktop Table Row
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50";
+                tr.innerHTML = `<td class="px-2 py-3 text-gray-600 whitespace-nowrap">${r.date}</td>
+                    <td class="px-2 py-3"><span class="text-xs font-bold mr-1 ${badge} px-1 rounded whitespace-nowrap">${r.type}</span>${r.desc}</td>
+                    <td class="px-2 py-3 text-right font-medium">${inc}</td>
+                    <td class="px-2 py-3 text-right font-medium">${exp}</td>
+                    <td class="px-2 py-3 text-right font-bold text-gray-700">${bal}</td>
+                    <td class="px-2 py-3 text-xs text-gray-500">${l3}</td>
+                    <td class="px-2 py-3 text-center">${icon}</td>
+                    <td class="px-2 py-3 text-center whitespace-nowrap">${action}</td>`;
                 tbody.appendChild(tr);
+
+                // 2. Mobile Card
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-lg shadow border-l-4 " + (r.type==='管理費'?'border-blue-500':(r.type==='車位租借'?'border-green-500':'border-orange-500'));
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="text-gray-500 text-xs">${r.date}</span>
+                            <div class="font-bold text-gray-800 text-lg">${r.desc}</div>
+                        </div>
+                        <span class="text-xs font-bold ${badge} px-2 py-1 rounded">${r.type}</span>
+                    </div>
+                    <div class="flex justify-between items-center mb-2">
+                        <div class="text-sm">
+                            ${inc ? `<div class="font-bold text-green-600">收: $${r.income}</div>` : ''}
+                            ${exp ? `<div class="font-bold text-red-600">支: $${r.expense}</div>` : ''}
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-gray-400">結餘</div>
+                            <div class="font-bold text-gray-700">${bal}</div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+                        <div class="text-xs text-gray-400">後三碼: ${l3 || '-'}</div>
+                        <div class="flex items-center gap-3">
+                            <div class="text-sm">${icon}</div>
+                            <div class="flex gap-1">${action}</div>
+                        </div>
+                    </div>
+                `;
+                mobileList.appendChild(card);
             });
         }
 
