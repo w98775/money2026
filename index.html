@@ -79,6 +79,7 @@
             transform: translateZ(0); /* 渲染層強制隔離 (GPU加速，防截圖位移) */
         }
     </style>
+<link rel="stylesheet" href="/index.css">
 </head>
 <body>
 
@@ -443,8 +444,22 @@
 
         function calculateBalancesForList(list) {
             list.sort((a, b) => {
-                const d = new Date(a.date) - new Date(b.date);
-                return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
+                // 強制將「初始餘額」排在第一筆
+                if (a.type === '初始餘額' && b.type !== '初始餘額') return -1;
+                if (a.type !== '初始餘額' && b.type === '初始餘額') return 1;
+
+                const da = new Date(a.date);
+                const db = new Date(b.date);
+                
+                if (da - db !== 0) return da - db;
+
+                // iOS 對於 toLocaleString 格式的 Date 解析較不穩定，增加安全檢查
+                const ta = new Date(a.timestamp);
+                const tb = new Date(b.timestamp);
+                if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
+                
+                // 如果連 timestamp 都無法比較，則維持原序
+                return 0;
             });
 
             let runningBal = 0;
@@ -919,5 +934,6 @@
         function calcResult() { try{calcVal=String(Function('"use strict";return ('+calcVal+')')());display.value=calcVal;}catch{display.value='Error';setTimeout(calcClear,1000);} }
         
     </script>
+<script type="module" src="/index.tsx"></script>
 </body>
 </html>
