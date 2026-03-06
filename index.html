@@ -3,32 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統 v7.0 (iOS截圖渲染修正版)</title>
+    <title>大樓財務管理系統 v7.5 (錯誤修復版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- 引入 html2canvas 用於截圖 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { font-family: "Noto Sans TC", sans-serif; background-color: #f3f4f6; padding-bottom: 120px; }
         .hidden-tab { display: none; }
-        .floating-calc {
-            position: fixed; bottom: 20px; right: 20px; width: 220px;
-            background-color: #1f2937; border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3); z-index: 100;
-            padding: 10px; transform: scale(0.9); transform-origin: bottom right;
-        }
-        .calc-btn { height: 40px; font-size: 1rem; transition: all 0.1s; }
-        .calc-btn:active { transform: scale(0.95); }
-        .calc-display {
-            background-color: #111827; color: #4ade80; font-family: monospace;
-            font-size: 1.5rem; text-align: right; padding: 8px;
-            border-radius: 6px; margin-bottom: 10px;
-        }
-        .calc-toggle {
-            position: absolute; top: -30px; right: 0; background: #1f2937;
-            color: white; padding: 4px 12px; border-radius: 6px 6px 0 0;
-            cursor: pointer; font-size: 0.8rem;
-        }
+        
         @keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         .balance-card { animation: fadeInDown 0.5s ease-out; }
         .editing-mode { border: 2px solid #f59e0b; background-color: #fffbeb; }
@@ -66,7 +47,17 @@
         .month-checkbox-label:hover { background-color: #f3f4f6; }
         .month-checkbox { margin-right: 8px; }
         
-        .hide-on-screenshot { display: none !important; }
+        /* === iOS 標籤置中修復 === */
+        .type-badge {
+            display: inline-block;
+            vertical-align: middle;
+            height: 1.5rem;          
+            line-height: 1.55rem;    
+            margin-top: -2px;        
+            transform: translateZ(0); 
+            padding: 0 0.5rem;       
+            border-radius: 0.25rem;
+        }
     </style>
 </head>
 <body>
@@ -304,41 +295,8 @@
         </div>
     </div>
 
-    <!-- 浮動按鈕區 -->
-    <div class="fixed bottom-5 right-5 flex flex-col gap-2 z-50">
-        <!-- 截圖按鈕 -->
-        <button onclick="takeScreenshot()" class="w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition" title="一鍵截圖">
-            <i class="fa-solid fa-camera"></i>
-        </button>
-
-        <!-- 計算機開關 -->
-        <button onclick="toggleCalc()" id="showCalcBtn" class="w-12 h-12 bg-gray-800 text-white rounded-full shadow-lg flex items-center justify-center"><i class="fa-solid fa-calculator"></i></button>
-    </div>
-
-    <div id="floatingCalc" class="floating-calc hidden">
-        <div class="calc-toggle" onclick="toggleCalc()"><i class="fa-solid fa-calculator"></i> 收合</div>
-        <input type="text" id="calcDisplay" readonly class="calc-display w-full" value="0">
-        <div class="grid grid-cols-4 gap-2">
-            <button onclick="calcClear()" class="calc-btn col-span-2 bg-red-600 rounded text-white font-bold">AC</button>
-            <button onclick="calcDelete()" class="calc-btn bg-gray-600 rounded text-white"><i class="fa-solid fa-delete-left"></i></button>
-            <button onclick="calcAppend('/')" class="calc-btn bg-orange-600 rounded text-white">÷</button>
-            <button onclick="calcAppend('7')" class="calc-btn bg-gray-700 rounded text-white">7</button>
-            <button onclick="calcAppend('8')" class="calc-btn bg-gray-700 rounded text-white">8</button>
-            <button onclick="calcAppend('9')" class="calc-btn bg-gray-700 rounded text-white">9</button>
-            <button onclick="calcAppend('*')" class="calc-btn bg-orange-600 rounded text-white">×</button>
-            <button onclick="calcAppend('4')" class="calc-btn bg-gray-700 rounded text-white">4</button>
-            <button onclick="calcAppend('5')" class="calc-btn bg-gray-700 rounded text-white">5</button>
-            <button onclick="calcAppend('6')" class="calc-btn bg-gray-700 rounded text-white">6</button>
-            <button onclick="calcAppend('-')" class="calc-btn bg-orange-600 rounded text-white">-</button>
-            <button onclick="calcAppend('1')" class="calc-btn bg-gray-700 rounded text-white">1</button>
-            <button onclick="calcAppend('2')" class="calc-btn bg-gray-700 rounded text-white">2</button>
-            <button onclick="calcAppend('3')" class="calc-btn bg-gray-700 rounded text-white">3</button>
-            <button onclick="calcAppend('+')" class="calc-btn bg-orange-600 rounded text-white">+</button>
-            <button onclick="calcAppend('0')" class="calc-btn col-span-2 bg-gray-700 rounded text-white">0</button>
-            <button onclick="calcAppend('.')" class="calc-btn bg-gray-700 rounded text-white">.</button>
-            <button onclick="calcResult()" class="calc-btn bg-blue-600 rounded text-white">=</button>
-        </div>
-    </div>
+    <!-- 空的浮動容器保留 -->
+    <div class="fixed bottom-5 right-5 flex flex-col gap-2 z-50"></div>
 
     <script>
         const today = new Date().toISOString().split('T')[0];
@@ -361,6 +319,7 @@
         const initialLen = records.length;
         records = records.filter(r => {
             if (r.id === 'fixed-init-balance-2025' || r.id === 'fixed-sample-parking') return false;
+            // 避免舊範例重複
             if (r.type === '初始餘額' && r.desc === '上年度餘額' && r.balance == 378129) return false;
             if (r.type === '車位租借' && r.desc && r.desc.includes('車位 31 (2-2)')) return false;
             return true;
@@ -373,41 +332,11 @@
         updateTotalBalanceDisplay();
         initMonthFilter(); 
         renderRecords();
-        if (GAS_URL) downloadFromCloud(true); 
+        if (GAS_URL) downloadFromCloud(true).catch(e => console.warn(e)); 
 
         document.addEventListener("visibilitychange", function() {
-            if (!document.hidden && GAS_URL) downloadFromCloud(true);
+            if (!document.hidden && GAS_URL) downloadFromCloud(true).catch(e => console.warn(e));
         });
-
-        // --- Screenshot Function ---
-        function takeScreenshot() {
-            switchTab('records');
-            document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.add('hide-on-screenshot'));
-
-            // 滾動到頂部
-            window.scrollTo(0,0);
-
-            const target = document.getElementById('tab-records');
-            
-            html2canvas(target, {
-                scale: 2, 
-                backgroundColor: '#ffffff',
-                useCORS: true,
-                ignoreElements: (element) => {
-                    return element.classList.contains('screenshot-hide') || element.id === 'noDataMsg';
-                }
-            }).then(canvas => {
-                document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.remove('hide-on-screenshot'));
-                const link = document.createElement('a');
-                link.download = `財務明細_${new Date().toISOString().slice(0,10)}.png`;
-                link.href = canvas.toDataURL();
-                link.click();
-            }).catch(err => {
-                console.error(err);
-                alert('截圖失敗，請重試');
-                document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.remove('hide-on-screenshot'));
-            });
-        }
 
         // --- Core Functions ---
         async function downloadFromCloud(silent = false) {
@@ -418,10 +347,14 @@
             if(!silent) { icon.className = "fa-solid fa-spinner fa-spin"; txt.textContent = "更新中..."; }
 
             try {
-                const response = await fetch(`${GAS_URL}?t=${new Date().getTime()}`, { method: 'GET', redirect: 'follow' });
+                const separator = GAS_URL.includes('?') ? '&' : '?';
+                const fetchUrl = `${GAS_URL}${separator}t=${new Date().getTime()}`;
+                
+                const response = await fetch(fetchUrl, { method: 'GET', redirect: 'follow' });
                 if (!response.ok) throw new Error("HTTP " + response.status);
                 const contentType = response.headers.get("content-type");
-                if (contentType && contentType.includes("text/html")) throw new Error("Apps Script 未更新 (HTML Error)");
+                if (contentType && contentType.includes("text/html")) throw new Error("Apps Script 網址可能無效或未正確部署");
+                
                 const cloudData = await response.json();
                 
                 let localRecords = JSON.parse(localStorage.getItem('building_records') || '[]');
@@ -455,15 +388,32 @@
                 if (!silent && updateCount > 0) alert(`已從雲端還原 ${updateCount} 筆資料！`);
                 
             } catch (e) {
-                console.error(e);
-                if (!silent) alert("讀取失敗，請檢查設定: " + e.message);
-            } finally { checkSyncStatus(); }
+                // 將 console.error 改為 console.warn，避免在控制台產生紅色報錯讓使用者誤會是程式崩潰
+                console.warn("雲端連線提示 (可能為網路不穩或無效的 API 網址):", e.message);
+                if (!silent) alert("讀取失敗，請檢查您的網路或重新確認 Google Apps Script 網址。");
+            } finally { 
+                checkSyncStatus(); 
+            }
         }
 
         function calculateBalancesForList(list) {
             list.sort((a, b) => {
-                const d = new Date(a.date) - new Date(b.date);
-                return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
+                if (a.type === '初始餘額' && b.type !== '初始餘額') return -1;
+                if (a.type !== '初始餘額' && b.type === '初始餘額') return 1;
+
+                const dateA = new Date(a.date).getTime();
+                const dateB = new Date(b.date).getTime();
+                const d = dateA - dateB;
+                
+                if (d !== 0 && !isNaN(d)) return d;
+
+                const extractTime = (id) => {
+                    if (!id) return 0;
+                    const parts = id.split('-');
+                    return parts.length > 1 ? parseInt(parts[1]) || 0 : 0;
+                };
+                
+                return extractTime(a.id) - extractTime(b.id);
             });
 
             let runningBal = 0;
@@ -521,9 +471,10 @@
                 }
 
                 if(action === 'create') alert('成功！');
-                setTimeout(() => downloadFromCloud(true), 800); 
+                setTimeout(() => downloadFromCloud(true).catch(e => console.warn(e)), 800); 
             } catch (e) {
-                alert('上傳失敗 (已存於本地)');
+                console.warn('背景上傳警告 (資料已在本機保留):', e.message);
+                if (action === 'create') alert('上傳失敗 (資料已暫存於本機，將於稍後自動重試同步)');
             } finally {
                 resetUI();
             }
@@ -548,8 +499,8 @@
         function handleSyncClick() {
             const rs = JSON.parse(localStorage.getItem('building_records') || '[]');
             const pending = rs.filter(r => !r.synced);
-            if (pending.length > 0) syncPendingRecords();
-            else downloadFromCloud(false);
+            if (pending.length > 0) syncPendingRecords().catch(e => console.warn(e));
+            else downloadFromCloud(false).catch(e => console.warn(e));
         }
 
         async function syncPendingRecords() {
@@ -562,7 +513,7 @@
                 await sendToSheet(record, null, 'update');
                 await new Promise(r => setTimeout(r, 400));
             }
-            downloadFromCloud(false);
+            downloadFromCloud(false).catch(e => console.warn(e));
         }
 
         let editingId = null; 
@@ -601,8 +552,39 @@
             initMonthFilter(); 
             renderRecords();
 
-            if(editingId) { cancelEdit(); syncPendingRecords(); }
-            else { sendToSheet(newRecord, form, 'create'); }
+            if(editingId) { cancelEdit(); syncPendingRecords().catch(e => console.warn(e)); }
+            else { sendToSheet(newRecord, form, 'create').catch(e => console.warn(e)); }
+        }
+
+        // Added back the cancelEdit function
+        function cancelEdit() {
+            editingId = null;
+            document.getElementById('editModeBanner').classList.add('hidden');
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('editing-mode'));
+            
+            const feeBtn = document.querySelector('#form-fee .submit-btn');
+            if(feeBtn) { 
+                feeBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>提交管理費'; 
+                feeBtn.className = 'submit-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200 mt-2'; 
+            }
+            
+            const parkBtn = document.querySelector('#form-parking .submit-btn');
+            if(parkBtn) { 
+                parkBtn.innerHTML = '<i class="fa-solid fa-car mr-2"></i>登記車位'; 
+                parkBtn.className = 'submit-btn w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200 mt-2'; 
+            }
+
+            const miscBtn = document.querySelector('#form-misc .submit-btn');
+            if(miscBtn) { 
+                miscBtn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜項'; 
+                miscBtn.className = 'submit-btn w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200 mt-2'; 
+            }
+
+            document.querySelectorAll('form').forEach(f => {
+                f.reset();
+                if(f.querySelector('.date-input')) f.querySelector('.date-input').value = today;
+            });
+            switchTab('records');
         }
 
         function initMonthFilter() {
@@ -706,7 +688,7 @@
                     if (r.date.startsWith('2025')) {
                         rMonth = '2026-01';
                     }
-                    if (!selectedMonths.has(rMonth)) return false;
+                    if (r.type !== '初始餘額' && !selectedMonths.has(rMonth)) return false;
                 }
 
                 if (searchKeyword) {
@@ -745,10 +727,9 @@
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-50";
                 
-                // --- iOS 截圖修復關鍵：使用 inline-block + align-middle + leading-4 ---
-                tr.innerHTML = `<td class="px-2 py-3 text-gray-600 whitespace-nowrap">${r.date}</td>
+                tr.innerHTML = `<td class="px-2 py-3 text-gray-600 whitespace-nowrap">${r.date || ''}</td>
                     <td class="px-2 py-3">
-                        <span class="inline-block align-middle text-xs font-bold mr-1 ${badge} px-2 py-1 rounded whitespace-nowrap leading-4" style="transform: translateZ(0);">${r.type}</span>${r.desc}
+                        <span class="type-badge text-xs font-bold mr-1 ${badge}">${r.type}</span>${r.desc}
                     </td>
                     <td class="px-2 py-3 text-right font-medium">${inc}</td>
                     <td class="px-2 py-3 text-right font-medium">${exp}</td>
@@ -764,10 +745,10 @@
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-2">
                         <div>
-                            <span class="text-gray-500 text-xs">${r.date}</span>
+                            <span class="text-gray-500 text-xs">${r.date || ''}</span>
                             <div class="font-bold text-gray-800 text-lg">${r.desc}</div>
                         </div>
-                        <span class="inline-block align-middle text-xs font-bold ${badge} px-2 py-1 rounded leading-4" style="transform: translateZ(0);">${r.type}</span>
+                        <span class="type-badge text-xs font-bold ${badge}">${r.type}</span>
                     </div>
                     <div class="flex justify-between items-center mb-2">
                         <div class="text-sm">
@@ -791,6 +772,18 @@
             });
         }
 
+        // 新增這段函式來更新上方總餘額卡片
+        function updateTotalBalanceDisplay() {
+            const rs = calculateBalancesForList(JSON.parse(localStorage.getItem('building_records') || '[]'));
+            if (rs.length > 0) {
+                const latest = rs[rs.length - 1]; 
+                const bal = latest.currentBalance;
+                document.getElementById('totalBalanceDisplay').textContent = (bal !== undefined && !isNaN(bal)) ? `$${bal.toLocaleString()}` : '$0';
+            } else {
+                document.getElementById('totalBalanceDisplay').textContent = '$0';
+            }
+        }
+
         function deleteRecord(id) {
             if(!confirm('確定要刪除這筆資料嗎？\n(這將會把金額歸零並標記為已刪除，然後同步到雲端)')) return;
             let rs = JSON.parse(localStorage.getItem('building_records') || '[]');
@@ -803,7 +796,9 @@
                 rs[index] = record;
                 rs = calculateBalancesForList(rs);
                 localStorage.setItem('building_records', JSON.stringify(rs));
-                syncPendingRecords(); renderRecords(); updateTotalBalanceDisplay();
+                syncPendingRecords().catch(e => console.warn(e)); 
+                renderRecords(); 
+                updateTotalBalanceDisplay();
             }
         }
 
@@ -860,19 +855,8 @@
             checkSyncStatus();
             alert("已匯入 5 筆資料！系統將自動嘗試同步。");
             closeSettingsModal();
-            syncPendingRecords();
+            syncPendingRecords().catch(e => console.warn(e));
             initMonthFilter(); 
-        }
-
-        function updateTotalBalanceDisplay() {
-            const rs = calculateBalancesForList(JSON.parse(localStorage.getItem('building_records') || '[]'));
-            if (rs.length > 0) {
-                const latest = rs[rs.length - 1]; 
-                const bal = latest.currentBalance;
-                document.getElementById('totalBalanceDisplay').textContent = (bal !== undefined && !isNaN(bal)) ? `$${bal.toLocaleString()}` : '$0';
-            } else {
-                document.getElementById('totalBalanceDisplay').textContent = '$0';
-            }
         }
 
         function filterRecords(t) { currentFilter=t; document.querySelectorAll('.filter-btn').forEach(b=>b.className='filter-btn px-3 py-1 text-xs rounded text-gray-500 hover:bg-gray-200'); if(document.getElementById('filter-'+(t==='all'?'all':(t==='管理費'?'fee':(t==='車位租借'?'parking':'misc'))))) document.getElementById('filter-'+(t==='all'?'all':(t==='管理費'?'fee':(t==='車位租借'?'parking':'misc')))).className='filter-btn px-3 py-1 text-xs rounded bg-white shadow text-indigo-600 font-bold'; renderRecords(); }
@@ -895,15 +879,9 @@
         function updateParkingPrice() { const s=document.getElementById('parkingSpotSelect').value; document.getElementById('parkingPrice').value = s==='11'?200:(s?800:''); }
         function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); document.getElementById('gasUrlInput').value=GAS_URL; }
         function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-        function saveSettings() { const u=document.getElementById('gasUrlInput').value.trim(); if(u){localStorage.setItem('building_gas_url',u); GAS_URL=u; alert('已儲存'); closeSettingsModal(); downloadFromCloud(false);} }
-        function forceDownload() { downloadFromCloud(false); closeSettingsModal(); }
+        function saveSettings() { const u=document.getElementById('gasUrlInput').value.trim(); if(u){localStorage.setItem('building_gas_url',u); GAS_URL=u; alert('已儲存'); closeSettingsModal(); downloadFromCloud(false).catch(e=>console.warn(e));} }
+        function forceDownload() { downloadFromCloud(false).catch(e => console.warn(e)); closeSettingsModal(); }
         function resetSyncStatus() { let rs=JSON.parse(localStorage.getItem('building_records')||'[]'); rs.forEach(r=>r.synced=false); localStorage.setItem('building_records',JSON.stringify(rs)); checkSyncStatus(); renderRecords(); alert('狀態已重置'); }
-        let calcVal='0'; const display=document.getElementById('calcDisplay');
-        function toggleCalc() { const c=document.getElementById('floatingCalc'); const b=document.getElementById('showCalcBtn'); if(c.classList.contains('hidden')){c.classList.remove('hidden');b.classList.add('hidden');}else{c.classList.add('hidden');b.classList.remove('hidden');} }
-        function calcAppend(v) { if(calcVal==='0' && v!=='.') calcVal=v; else calcVal+=v; display.value=calcVal; }
-        function calcClear() { calcVal='0'; display.value='0'; }
-        function calcDelete() { calcVal=calcVal.length>1?calcVal.slice(0,-1):'0'; display.value=calcVal; }
-        function calcResult() { try{calcVal=String(Function('"use strict";return ('+calcVal+')')());display.value=calcVal;}catch{display.value='Error';setTimeout(calcClear,1000);} }
         
     </script>
 </body>
