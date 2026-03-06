@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大樓財務管理系統</title>
+    <title>大樓財務管理系統 v7.0 (iOS截圖渲染修正版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- 引入 html2canvas 用於截圖 -->
@@ -67,19 +67,7 @@
         .month-checkbox { margin-right: 8px; }
         
         .hide-on-screenshot { display: none !important; }
-        
-        /* === iOS 截圖背景位移終極修復 === */
-        .type-badge {
-            display: inline-block;
-            vertical-align: middle;
-            /* 修正：移除固定高度與負邊距，改用 padding 撐開，自然置中 */
-            line-height: 1;          
-            padding: 4px 8px;       
-            border-radius: 0.25rem;
-            transform: translateZ(0); /* 渲染層強制隔離 (GPU加速，防截圖位移) */
-        }
     </style>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body>
 
@@ -322,6 +310,34 @@
         <button onclick="takeScreenshot()" class="w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition" title="一鍵截圖">
             <i class="fa-solid fa-camera"></i>
         </button>
+
+        <!-- 計算機開關 -->
+        <button onclick="toggleCalc()" id="showCalcBtn" class="w-12 h-12 bg-gray-800 text-white rounded-full shadow-lg flex items-center justify-center"><i class="fa-solid fa-calculator"></i></button>
+    </div>
+
+    <div id="floatingCalc" class="floating-calc hidden">
+        <div class="calc-toggle" onclick="toggleCalc()"><i class="fa-solid fa-calculator"></i> 收合</div>
+        <input type="text" id="calcDisplay" readonly class="calc-display w-full" value="0">
+        <div class="grid grid-cols-4 gap-2">
+            <button onclick="calcClear()" class="calc-btn col-span-2 bg-red-600 rounded text-white font-bold">AC</button>
+            <button onclick="calcDelete()" class="calc-btn bg-gray-600 rounded text-white"><i class="fa-solid fa-delete-left"></i></button>
+            <button onclick="calcAppend('/')" class="calc-btn bg-orange-600 rounded text-white">÷</button>
+            <button onclick="calcAppend('7')" class="calc-btn bg-gray-700 rounded text-white">7</button>
+            <button onclick="calcAppend('8')" class="calc-btn bg-gray-700 rounded text-white">8</button>
+            <button onclick="calcAppend('9')" class="calc-btn bg-gray-700 rounded text-white">9</button>
+            <button onclick="calcAppend('*')" class="calc-btn bg-orange-600 rounded text-white">×</button>
+            <button onclick="calcAppend('4')" class="calc-btn bg-gray-700 rounded text-white">4</button>
+            <button onclick="calcAppend('5')" class="calc-btn bg-gray-700 rounded text-white">5</button>
+            <button onclick="calcAppend('6')" class="calc-btn bg-gray-700 rounded text-white">6</button>
+            <button onclick="calcAppend('-')" class="calc-btn bg-orange-600 rounded text-white">-</button>
+            <button onclick="calcAppend('1')" class="calc-btn bg-gray-700 rounded text-white">1</button>
+            <button onclick="calcAppend('2')" class="calc-btn bg-gray-700 rounded text-white">2</button>
+            <button onclick="calcAppend('3')" class="calc-btn bg-gray-700 rounded text-white">3</button>
+            <button onclick="calcAppend('+')" class="calc-btn bg-orange-600 rounded text-white">+</button>
+            <button onclick="calcAppend('0')" class="calc-btn col-span-2 bg-gray-700 rounded text-white">0</button>
+            <button onclick="calcAppend('.')" class="calc-btn bg-gray-700 rounded text-white">.</button>
+            <button onclick="calcResult()" class="calc-btn bg-blue-600 rounded text-white">=</button>
+        </div>
     </div>
 
     <script>
@@ -363,10 +379,12 @@
             if (!document.hidden && GAS_URL) downloadFromCloud(true);
         });
 
-        // --- Screenshot Function (Updated for Mobile & Desktop) ---
+        // --- Screenshot Function ---
         function takeScreenshot() {
             switchTab('records');
             document.querySelectorAll('.mobile-action-area').forEach(el => el.classList.add('hide-on-screenshot'));
+
+            // 滾動到頂部
             window.scrollTo(0,0);
 
             const target = document.getElementById('tab-records');
@@ -444,22 +462,8 @@
 
         function calculateBalancesForList(list) {
             list.sort((a, b) => {
-                // 強制將「初始餘額」排在第一筆
-                if (a.type === '初始餘額' && b.type !== '初始餘額') return -1;
-                if (a.type !== '初始餘額' && b.type === '初始餘額') return 1;
-
-                const da = new Date(a.date);
-                const db = new Date(b.date);
-                
-                if (da - db !== 0) return da - db;
-
-                // iOS 對於 toLocaleString 格式的 Date 解析較不穩定，增加安全檢查
-                const ta = new Date(a.timestamp);
-                const tb = new Date(b.timestamp);
-                if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
-                
-                // 如果連 timestamp 都無法比較，則維持原序
-                return 0;
+                const d = new Date(a.date) - new Date(b.date);
+                return d !== 0 ? d : new Date(a.timestamp) - new Date(b.timestamp);
             });
 
             let runningBal = 0;
@@ -599,38 +603,6 @@
 
             if(editingId) { cancelEdit(); syncPendingRecords(); }
             else { sendToSheet(newRecord, form, 'create'); }
-        }
-
-        // Added back the cancelEdit function
-        function cancelEdit() {
-            editingId = null;
-            document.getElementById('editModeBanner').classList.add('hidden');
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('editing-mode'));
-            
-            // Restore buttons
-            const feeBtn = document.querySelector('#form-fee .submit-btn');
-            if(feeBtn) { 
-                feeBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>提交管理費'; 
-                feeBtn.className = 'submit-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200 mt-2'; 
-            }
-            
-            const parkBtn = document.querySelector('#form-parking .submit-btn');
-            if(parkBtn) { 
-                parkBtn.innerHTML = '<i class="fa-solid fa-car mr-2"></i>登記車位'; 
-                parkBtn.className = 'submit-btn w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200 mt-2'; 
-            }
-
-            const miscBtn = document.querySelector('#form-misc .submit-btn');
-            if(miscBtn) { 
-                miscBtn.innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>記錄雜項'; 
-                miscBtn.className = 'submit-btn w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200 mt-2'; 
-            }
-
-            document.querySelectorAll('form').forEach(f => {
-                f.reset();
-                if(f.querySelector('.date-input')) f.querySelector('.date-input').value = today;
-            });
-            switchTab('records');
         }
 
         function initMonthFilter() {
@@ -776,7 +748,7 @@
                 // --- iOS 截圖修復關鍵：使用 inline-block + align-middle + leading-4 ---
                 tr.innerHTML = `<td class="px-2 py-3 text-gray-600 whitespace-nowrap">${r.date}</td>
                     <td class="px-2 py-3">
-                        <span class="type-badge text-xs font-bold mr-1 ${badge}">${r.type}</span>${r.desc}
+                        <span class="inline-block align-middle text-xs font-bold mr-1 ${badge} px-2 py-1 rounded whitespace-nowrap leading-4" style="transform: translateZ(0);">${r.type}</span>${r.desc}
                     </td>
                     <td class="px-2 py-3 text-right font-medium">${inc}</td>
                     <td class="px-2 py-3 text-right font-medium">${exp}</td>
@@ -795,7 +767,7 @@
                             <span class="text-gray-500 text-xs">${r.date}</span>
                             <div class="font-bold text-gray-800 text-lg">${r.desc}</div>
                         </div>
-                        <span class="type-badge text-xs font-bold ${badge}">${r.type}</span>
+                        <span class="inline-block align-middle text-xs font-bold ${badge} px-2 py-1 rounded leading-4" style="transform: translateZ(0);">${r.type}</span>
                     </div>
                     <div class="flex justify-between items-center mb-2">
                         <div class="text-sm">
@@ -934,6 +906,5 @@
         function calcResult() { try{calcVal=String(Function('"use strict";return ('+calcVal+')')());display.value=calcVal;}catch{display.value='Error';setTimeout(calcClear,1000);} }
         
     </script>
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>
